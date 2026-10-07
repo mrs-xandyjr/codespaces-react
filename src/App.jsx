@@ -1,802 +1,330 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  Calendar,
+  Clock,
+  Plus,
+  Trash2,
+  Edit3,
+  Check,
+  X,
+  Search,
+  Download,
+  Upload,
+  Sun,
+  Moon,
+  BarChart3,
+  Filter,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Settings,
+  Tag,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+  FileSpreadsheet,
+  FileCode,
+  Sparkles,
+  Layers,
+  CalendarDays
+} from 'lucide-react';
 
-// Custom SVG Icons for SVG-level reliability & no external asset loading dependencies
-const Icons = {
-  Calendar: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  ),
-  Plus: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-    </svg>
-  ),
-  Trash: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  ),
-  Copy: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-    </svg>
-  ),
-  Edit: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-    </svg>
-  ),
-  Download: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  ),
-  Upload: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-    </svg>
-  ),
-  Moon: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-    </svg>
-  ),
-  Sun: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  ),
-  PieChart: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-    </svg>
-  ),
-  ZoomIn: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
-    </svg>
-  ),
-  ZoomOut: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
-    </svg>
-  ),
-  Search: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-  ),
-  Clock: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  MapPin: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
-  Sparkles: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-    </svg>
-  ),
-  Undo: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-    </svg>
-  ),
-  ChevronLeft: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-    </svg>
-  ),
-  ChevronRight: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-    </svg>
-  )
-};
+const GRID_START_MINUTES = 360; // 6:00 AM
+const GRID_END_MINUTES = 1080;   // 6:00 PM
+const TOTAL_MINUTES = GRID_END_MINUTES - GRID_START_MINUTES; // 720 minutes (12 hours)
 
-const PRESET_COLORS = [
-  { name: 'Work', bg: '#3b82f6', border: '#1d4ed8', category: 'Work' },
-  { name: 'Health', bg: '#10b981', border: '#047857', category: 'Health' },
-  { name: 'Focus', bg: '#f43f5e', border: '#be123c', category: 'Focus' },
-  { name: 'Meeting', bg: '#f59e0b', border: '#b45309', category: 'Meeting' },
-  { name: 'Break', bg: '#14b8a6', border: '#0f766e', category: 'Break' },
-  { name: 'Personal', bg: '#8b5cf6', border: '#6d28d9', category: 'Personal' },
-  { name: 'Urgent', bg: '#ef4444', border: '#b91c1c', category: 'Urgent' },
-  { name: 'Creative', bg: '#6366f1', border: '#4338ca', category: 'Creative' },
+// Grid scaling
+const MAIN_HOUR_HEIGHT = 80; // 80px per hour in main week view
+const MAIN_GRID_HEIGHT = (TOTAL_MINUTES / 60) * MAIN_HOUR_HEIGHT; // 960px
+
+const DAY_VIEW_HOUR_HEIGHT = 120; // 120px per hour in expanded single day view (higher resolution)
+const DAY_VIEW_GRID_HEIGHT = (TOTAL_MINUTES / 60) * DAY_VIEW_HOUR_HEIGHT; // 1440px
+
+// Fixed Schedule Dates: Jan 20, 2026 to Jan 27, 2026 (8 full days)
+const SCHEDULE_DATES = [
+  '2026-01-20',
+  '2026-01-21',
+  '2026-01-22',
+  '2026-01-23',
+  '2026-01-24',
+  '2026-01-25',
+  '2026-01-26',
+  '2026-01-27',
 ];
 
-// Fixed target range: Jan 20, 2026 - Jan 27, 2026 (8 Days)
-const DEFAULT_START_DATE = '2026-01-20';
-const DEFAULT_END_DATE = '2026-01-27';
+const PRESET_COLORS = [
+  '#3B82F6', // Blue
+  '#10B981', // Emerald
+  '#8B5CF6', // Purple
+  '#F59E0B', // Amber
+  '#EC4899', // Pink
+  '#14B8A6', // Teal
+  '#EF4444', // Red
+  '#6366F1', // Indigo
+  '#84CC16', // Lime
+  '#F97316', // Orange
+];
 
-const minutesToFormattedTime = (totalMinutes) => {
-  const mins = Math.max(0, Math.min(1439, totalMinutes));
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const ampm = h24 >= 12 ? 'PM' : 'AM';
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+const DEFAULT_CATEGORIES = [
+  { id: 'cat-work', name: 'Deep Work', color: '#3B82F6' },
+  { id: 'cat-fitness', name: 'Health & Fitness', color: '#10B981' },
+  { id: 'cat-learn', name: 'Learning & Dev', color: '#8B5CF6' },
+  { id: 'cat-meeting', name: 'Team Meetings', color: '#EC4899' },
+  { id: 'cat-admin', name: 'Admin & Email', color: '#F59E0B' },
+  { id: 'cat-leisure', name: 'Personal & Rest', color: '#14B8A6' },
+];
+
+const INITIAL_ACTIVITIES = [
+  {
+    id: 'act-1',
+    title: 'Sprint Planning & Kickoff',
+    date: '2026-01-20',
+    startTime: '08:00',
+    endTime: '09:30',
+    categoryId: 'cat-meeting',
+    notes: 'Review goals for Q1 and assign initial development tickets.',
+  },
+  {
+    id: 'act-2',
+    title: 'Core Architecture Coding',
+    date: '2026-01-20',
+    startTime: '10:00',
+    endTime: '12:30',
+    categoryId: 'cat-work',
+    notes: 'Implement API routing layer and global state store.',
+  },
+  {
+    id: 'act-3',
+    title: 'Gym Workout & Cardio',
+    date: '2026-01-20',
+    startTime: '13:00',
+    endTime: '14:15',
+    categoryId: 'cat-fitness',
+    notes: 'Leg day routine and 20 min high intensity cycling.',
+  },
+  {
+    id: 'act-4',
+    title: 'React 19 & Next.js Study',
+    date: '2026-01-21',
+    startTime: '07:00',
+    endTime: '08:30',
+    categoryId: 'cat-learn',
+    notes: 'Explore Server Actions, useActionState, and Optimistic UI features.',
+  },
+  {
+    id: 'act-5',
+    title: 'Client Demo & Feedback',
+    date: '2026-01-21',
+    startTime: '09:00',
+    endTime: '10:30',
+    categoryId: 'cat-meeting',
+    notes: 'Present prototype wireframes to stakeholders for sign-off.',
+  },
+  {
+    id: 'act-6',
+    title: 'Inbox Zero & Documentation',
+    date: '2026-01-21',
+    startTime: '11:00',
+    endTime: '12:00',
+    categoryId: 'cat-admin',
+    notes: 'Clear pending emails and update internal team wiki.',
+  },
+  {
+    id: 'act-7',
+    title: 'UI Design System Review',
+    date: '2026-01-22',
+    startTime: '08:30',
+    endTime: '10:00',
+    categoryId: 'cat-work',
+    notes: 'Audit Tailwind color tokens and dark mode component specs.',
+  },
+  {
+    id: 'act-8',
+    title: 'Database Schema Migration',
+    date: '2026-01-22',
+    startTime: '10:00',
+    endTime: '12:00',
+    categoryId: 'cat-work',
+    notes: 'Optimize indexes and run benchmark scripts on staging environment.',
+  },
+  {
+    id: 'act-9',
+    title: 'Yoga & Mindfulness',
+    date: '2026-01-23',
+    startTime: '06:30',
+    endTime: '07:30',
+    categoryId: 'cat-fitness',
+    notes: 'Morning stretch and breathing exercise session.',
+  },
+  {
+    id: 'act-10',
+    title: 'Code Review & Refactoring',
+    date: '2026-01-23',
+    startTime: '13:30',
+    endTime: '15:45',
+    categoryId: 'cat-work',
+    notes: 'Review pull requests for batch selection and modal components.',
+  },
+  {
+    id: 'act-11',
+    title: 'Weekend Reading & Rest',
+    date: '2026-01-24',
+    startTime: '09:00',
+    endTime: '11:30',
+    categoryId: 'cat-leisure',
+    notes: 'Read technical whitepapers and enjoy morning coffee.',
+  },
+  {
+    id: 'act-12',
+    title: 'Weekly Retrospective',
+    date: '2026-01-26',
+    startTime: '16:00',
+    endTime: '17:30',
+    categoryId: 'cat-meeting',
+    notes: 'Discuss sprint accomplishments and team retro points.',
+  }
+];
+
+const timeToMinutes = (timeStr) => {
+  if (!timeStr) return 0;
+  const [hrs, mins] = timeStr.split(':').map(Number);
+  return hrs * 60 + mins;
 };
 
-const minutesToInputTime = (totalMinutes) => {
-  const mins = Math.max(0, Math.min(1439, totalMinutes));
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+const minutesToTime = (totalMinutes) => {
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = Math.round(totalMinutes % 60);
+  const formattedHrs = String(hrs).padStart(2, '0');
+  const formattedMins = String(mins).padStart(2, '0');
+  return `${formattedHrs}:${formattedMins}`;
 };
 
-const inputTimeToMinutes = (timeStr) => {
-  if (!timeStr) return 360;
+const formatDisplayTime = (timeStr) => {
+  if (!timeStr) return '';
   const [h, m] = timeStr.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  const displayMin = String(m).padStart(2, '0');
+  return `${displayHour}:${displayMin} ${period}`;
 };
 
-const formatDuration = (mins) => {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+const formatDateLabel = (dateStr) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const dateObj = new Date(year, month - 1, day);
+  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+  const fullDayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
+  const fullMonthName = dateObj.toLocaleDateString('en-US', { month: 'long' });
+  return { dayName, fullDayName, formattedDate: `${monthName} ${day}`, fullFormattedDate: `${fullMonthName} ${day}, ${year}` };
 };
 
-const generateJan20Jan27SampleBlocks = () => {
-  return [
-    // Jan 20, 2026 (Tue)
-    {
-      id: 'sample-1',
-      date: '2026-01-20',
-      startMin: 6 * 60 + 30, // 06:30 AM
-      duration: 45,
-      title: 'Morning Gym & Stretch',
-      description: 'Cardio warm-up and flexibility routine',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Fit Gym'
-    },
-    {
-      id: 'sample-2',
-      date: '2026-01-20',
-      startMin: 8 * 60, // 08:00 AM
-      duration: 30,
-      title: 'Breakfast & News Triage',
-      description: 'Morning espresso and industry updates',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Home Cafe'
-    },
-    {
-      id: 'sample-3',
-      date: '2026-01-20',
-      startMin: 9 * 60, // 09:00 AM
-      duration: 30,
-      title: 'Q1 Kickoff & Team Standup',
-      description: 'Aligning weekly sprint goals with team',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Zoom Room A'
-    },
-    {
-      id: 'sample-4',
-      date: '2026-01-20',
-      startMin: 10 * 60, // 10:00 AM
-      duration: 105, // 1h 45m
-      title: 'Core Architecture Deep Work',
-      description: 'Refactoring schedule grid state engine',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Main Desk'
-    },
-    {
-      id: 'sample-5',
-      date: '2026-01-20',
-      startMin: 12 * 60, // 12:00 PM
-      duration: 60,
-      title: 'Team Lunch Break',
-      description: 'Fresh salad & social chat with peers',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Cafeteria'
-    },
-    {
-      id: 'sample-6',
-      date: '2026-01-20',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 90,
-      title: 'Product Strategy Review',
-      description: 'Quarterly roadmap sync with stakeholders',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Conference Rm 3'
-    },
-    {
-      id: 'sample-7',
-      date: '2026-01-20',
-      startMin: 15 * 60 + 30, // 03:30 PM
-      duration: 60,
-      title: 'Client Sync - Acme Corp',
-      description: 'Demoing 5-minute precision scheduler',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Meet Link'
-    },
-    {
-      id: 'sample-8',
-      date: '2026-01-20',
-      startMin: 17 * 60 + 15, // 05:15 PM
-      duration: 30,
-      title: 'Daily Wrap-Up & Notes',
-      description: 'Logging progress and tomorrow priorities',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
+const calculateOverlaps = (activities) => {
+  if (!activities || activities.length === 0) return [];
 
-    // Jan 21, 2026 (Wed)
-    {
-      id: 'sample-9',
-      date: '2026-01-21',
-      startMin: 6 * 60 + 15, // 06:15 AM
-      duration: 45,
-      title: 'Sunrise Jog',
-      description: '5k park trail run',
-      category: 'Health',
-      color: '#10b981',
-      location: 'City Park'
-    },
-    {
-      id: 'sample-10',
-      date: '2026-01-21',
-      startMin: 8 * 60 + 30, // 08:30 AM
-      duration: 45,
-      title: 'Email Triage & Planning',
-      description: 'Clear inbox zero',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Office'
-    },
-    {
-      id: 'sample-11',
-      date: '2026-01-21',
-      startMin: 9 * 60 + 30, // 09:30 AM
-      duration: 60,
-      title: 'Frontend Refactoring',
-      description: 'Optimizing touch drag & snap events',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'IDE'
-    },
-    {
-      id: 'sample-12',
-      date: '2026-01-21',
-      startMin: 11 * 60, // 11:00 AM
-      duration: 60,
-      title: 'Design Sprint Workshop',
-      description: 'Collaborative UI wireframing session',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Figma / Rm B'
-    },
-    {
-      id: 'sample-13',
-      date: '2026-01-21',
-      startMin: 12 * 60 + 15, // 12:15 PM
-      duration: 45,
-      title: 'Healthy Lunch',
-      description: 'Protein bowl & relaxation',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Terrace'
-    },
-    {
-      id: 'sample-14',
-      date: '2026-01-21',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 120, // 2h
-      title: 'System API Integration',
-      description: 'Building JSON/CSV exporter & storage handlers',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Desk'
-    },
-    {
-      id: 'sample-15',
-      date: '2026-01-21',
-      startMin: 16 * 60, // 04:00 PM
-      duration: 60,
-      title: '1-on-1 Mentorship',
-      description: 'Career growth & technical feedback',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Coffee Corner'
-    },
-    {
-      id: 'sample-16',
-      date: '2026-01-21',
-      startMin: 17 * 60 + 15, // 05:15 PM
-      duration: 35,
-      title: 'Planning Tomorrow Sprint',
-      description: 'Updating task backlog',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
+  const sorted = [...activities].map((act) => ({
+    ...act,
+    startMins: timeToMinutes(act.startTime),
+    endMins: timeToMinutes(act.endTime),
+  })).sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
 
-    // Jan 22, 2026 (Thu)
-    {
-      id: 'sample-17',
-      date: '2026-01-22',
-      startMin: 6 * 60 + 45, // 06:45 AM
-      duration: 45,
-      title: 'Yoga & Mindfulness',
-      description: 'Breathing exercises & gentle stretch',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Home Studio'
-    },
-    {
-      id: 'sample-18',
-      date: '2026-01-22',
-      startMin: 8 * 60 + 30, // 08:30 AM
-      duration: 60,
-      title: 'Technical Reading',
-      description: 'Web Application Performance whitepapers',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Library'
-    },
-    {
-      id: 'sample-19',
-      date: '2026-01-22',
-      startMin: 10 * 60, // 10:00 AM
-      duration: 90,
-      title: 'Client Proposal Pitch',
-      description: 'Presenting modern scheduling platform',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Boardroom'
-    },
-    {
-      id: 'sample-20',
-      date: '2026-01-22',
-      startMin: 12 * 60, // 12:00 PM
-      duration: 60,
-      title: 'Lunch with Alex',
-      description: 'Catching up on industry trends',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Bistro'
-    },
-    {
-      id: 'sample-21',
-      date: '2026-01-22',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 90,
-      title: 'Code Review & Testing',
-      description: 'Reviewing pull requests and writing tests',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'GitHub'
-    },
-    {
-      id: 'sample-22',
-      date: '2026-01-22',
-      startMin: 15 * 60 + 30, // 03:30 PM
-      duration: 90,
-      title: 'UI/UX Polish',
-      description: 'Fine-tuning Tailwind colors & animations',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Figma'
-    },
-    {
-      id: 'sample-23',
-      date: '2026-01-22',
-      startMin: 17 * 60 + 15, // 05:15 PM
-      duration: 30,
-      title: 'Inbox Zero & Admin',
-      description: 'Cleaning up slack messages and files',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
+  const clusters = [];
+  let currentCluster = [];
+  let clusterEnd = -1;
 
-    // Jan 23, 2026 (Fri)
-    {
-      id: 'sample-24',
-      date: '2026-01-23',
-      startMin: 6 * 60 + 30, // 06:30 AM
-      duration: 45,
-      title: 'Strength Workout',
-      description: 'Upper body weight session',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Fit Gym'
-    },
-    {
-      id: 'sample-25',
-      date: '2026-01-23',
-      startMin: 9 * 60, // 09:00 AM
-      duration: 30,
-      title: 'Friday Standup',
-      description: 'Quick check-in before release',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Zoom'
-    },
-    {
-      id: 'sample-26',
-      date: '2026-01-23',
-      startMin: 9 * 60 + 45, // 09:45 AM
-      duration: 105,
-      title: 'Release Deployment & QA',
-      description: 'Production push & sanity testing',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'DevOps Desk'
-    },
-    {
-      id: 'sample-27',
-      date: '2026-01-23',
-      startMin: 12 * 60, // 12:00 PM
-      duration: 60,
-      title: 'Friday Team Pizza Lunch',
-      description: 'Celebrating successful weekly release',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Lounge'
-    },
-    {
-      id: 'sample-28',
-      date: '2026-01-23',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 120,
-      title: 'Hackathon & Innovation Lab',
-      description: 'Exploring AI smart auto-scheduling features',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Lab'
-    },
-    {
-      id: 'sample-29',
-      date: '2026-01-23',
-      startMin: 16 * 60, // 04:00 PM
-      duration: 60,
-      title: 'Sprint Retro & Demo',
-      description: 'Demoing new schedule features to team',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Main Hall'
-    },
-    {
-      id: 'sample-30',
-      date: '2026-01-23',
-      startMin: 17 * 60, // 05:00 PM
-      duration: 30,
-      title: 'Weekly Clean Up',
-      description: 'Closing tabs and logging off for weekend',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-
-    // Jan 24, 2026 (Sat)
-    {
-      id: 'sample-31',
-      date: '2026-01-24',
-      startMin: 7 * 60, // 07:00 AM
-      duration: 90,
-      title: 'Morning Trail Run',
-      description: 'Outdoor fresh air cardio',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Mountain Park'
-    },
-    {
-      id: 'sample-32',
-      date: '2026-01-24',
-      startMin: 9 * 60 + 30, // 09:30 AM
-      duration: 120,
-      title: 'Farmers Market & Coffee',
-      description: 'Buying fresh organic groceries',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Town Square'
-    },
-    {
-      id: 'sample-33',
-      date: '2026-01-24',
-      startMin: 12 * 60, // 12:00 PM
-      duration: 120,
-      title: 'Family Brunch & Walk',
-      description: 'Weekend leisure time',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Downtown'
-    },
-    {
-      id: 'sample-34',
-      date: '2026-01-24',
-      startMin: 14 * 60 + 30, // 02:30 PM
-      duration: 120,
-      title: 'Side Project Coding',
-      description: 'Building custom React UI widgets',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Home Office'
-    },
-    {
-      id: 'sample-35',
-      date: '2026-01-24',
-      startMin: 17 * 60, // 05:00 PM
-      duration: 60,
-      title: 'Reading Fiction & Relaxation',
-      description: 'Unwinding with a book',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Living Room'
-    },
-
-    // Jan 25, 2026 (Sun)
-    {
-      id: 'sample-36',
-      date: '2026-01-25',
-      startMin: 8 * 60, // 08:00 AM
-      duration: 60,
-      title: 'Sunday Pancakes & Coffee',
-      description: 'Relaxed morning routine',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Kitchen'
-    },
-    {
-      id: 'sample-37',
-      date: '2026-01-25',
-      startMin: 10 * 60, // 10:00 AM
-      duration: 120,
-      title: 'Park Outing & Photography',
-      description: 'Nature walk with camera',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Botanical Garden'
-    },
-    {
-      id: 'sample-38',
-      date: '2026-01-25',
-      startMin: 13 * 60, // 01:00 PM
-      duration: 90,
-      title: 'Meal Prep for Week',
-      description: 'Cooking healthy lunches for Jan 26-27',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Kitchen'
-    },
-    {
-      id: 'sample-39',
-      date: '2026-01-25',
-      startMin: 15 * 60, // 03:00 PM
-      duration: 90,
-      title: 'Book Club Discussion',
-      description: 'Monthly virtual fiction review',
-      category: 'Personal',
-      color: '#8b5cf6',
-      location: 'Zoom'
-    },
-    {
-      id: 'sample-40',
-      date: '2026-01-25',
-      startMin: 17 * 60, // 05:00 PM
-      duration: 45,
-      title: 'Weekly Goals & Organization',
-      description: 'Reviewing schedule for Jan 26-27',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-
-    // Jan 26, 2026 (Mon)
-    {
-      id: 'sample-41',
-      date: '2026-01-26',
-      startMin: 6 * 60 + 30, // 06:30 AM
-      duration: 45,
-      title: 'Morning Gym',
-      description: 'Leg day session',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Fit Gym'
-    },
-    {
-      id: 'sample-42',
-      date: '2026-01-26',
-      startMin: 8 * 60 + 30, // 08:30 AM
-      duration: 60,
-      title: 'Weekly Goal Alignment',
-      description: 'Setting priorities for final week sprint',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-    {
-      id: 'sample-43',
-      date: '2026-01-26',
-      startMin: 10 * 60, // 10:00 AM
-      duration: 120,
-      title: 'Backend Database Migration',
-      description: 'Executing database schema updates',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'Terminal'
-    },
-    {
-      id: 'sample-44',
-      date: '2026-01-26',
-      startMin: 12 * 60 + 15, // 12:15 PM
-      duration: 45,
-      title: 'Lunch & Rest',
-      description: 'Quick meal and short walk',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Cafeteria'
-    },
-    {
-      id: 'sample-45',
-      date: '2026-01-26',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 90,
-      title: 'Executive Stakeholder Sync',
-      description: 'Presenting monthly project metrics',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Executive Suite'
-    },
-    {
-      id: 'sample-46',
-      date: '2026-01-26',
-      startMin: 15 * 60 + 30, // 03:30 PM
-      duration: 90,
-      title: 'Security Audit & Patching',
-      description: 'Reviewing dependencies and SSL certs',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-    {
-      id: 'sample-47',
-      date: '2026-01-26',
-      startMin: 17 * 60 + 15, // 05:15 PM
-      duration: 30,
-      title: 'Daily Recap',
-      description: 'Wrapping up tickets',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-
-    // Jan 27, 2026 (Tue)
-    {
-      id: 'sample-48',
-      date: '2026-01-27',
-      startMin: 6 * 60 + 30, // 06:30 AM
-      duration: 45,
-      title: 'Morning Walk & Podcast',
-      description: 'Brisk walk around neighborhood',
-      category: 'Health',
-      color: '#10b981',
-      location: 'Outdoors'
-    },
-    {
-      id: 'sample-49',
-      date: '2026-01-27',
-      startMin: 8 * 60 + 30, // 08:30 AM
-      duration: 60,
-      title: 'Performance Review Prep',
-      description: 'Assembling self-evaluation documents',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Desk'
-    },
-    {
-      id: 'sample-50',
-      date: '2026-01-27',
-      startMin: 10 * 60, // 10:00 AM
-      duration: 90,
-      title: 'Cross-Functional Design Review',
-      description: 'Final walkthrough of 8-day planner app',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Conf Rm 1'
-    },
-    {
-      id: 'sample-51',
-      date: '2026-01-27',
-      startMin: 12 * 60, // 12:00 PM
-      duration: 60,
-      title: 'Lunch Break',
-      description: 'Recharging for afternoon session',
-      category: 'Break',
-      color: '#14b8a6',
-      location: 'Bistro'
-    },
-    {
-      id: 'sample-52',
-      date: '2026-01-27',
-      startMin: 13 * 60 + 30, // 01:30 PM
-      duration: 120,
-      title: 'Feature Development Sprint',
-      description: 'Adding overlapping block side-by-side math',
-      category: 'Focus',
-      color: '#f43f5e',
-      location: 'IDE'
-    },
-    {
-      id: 'sample-53',
-      date: '2026-01-27',
-      startMin: 16 * 60, // 04:00 PM
-      duration: 60,
-      title: 'Documentation & Knowledge Sharing',
-      description: 'Writing developer documentation',
-      category: 'Work',
-      color: '#3b82f6',
-      location: 'Wiki'
-    },
-    {
-      id: 'sample-54',
-      date: '2026-01-27',
-      startMin: 17 * 60 + 15, // 05:15 PM
-      duration: 30,
-      title: '2-Week Schedule Retrospective',
-      description: 'Evaluating schedule utilization & achievements',
-      category: 'Meeting',
-      color: '#f59e0b',
-      location: 'Zoom Room'
+  sorted.forEach((item) => {
+    if (currentCluster.length === 0) {
+      currentCluster.push(item);
+      clusterEnd = item.endMins;
+    } else if (item.startMins < clusterEnd) {
+      currentCluster.push(item);
+      if (item.endMins > clusterEnd) clusterEnd = item.endMins;
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [item];
+      clusterEnd = item.endMins;
     }
-  ];
+  });
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  const result = [];
+  clusters.forEach((cluster) => {
+    const columns = [];
+    cluster.forEach((item) => {
+      let assignedCol = -1;
+      for (let i = 0; i < columns.length; i++) {
+        if (columns[i] <= item.startMins) {
+          assignedCol = i;
+          columns[i] = item.endMins;
+          break;
+        }
+      }
+      if (assignedCol === -1) {
+        assignedCol = columns.length;
+        columns.push(item.endMins);
+      }
+      item.columnIndex = assignedCol;
+    });
+
+    const totalCols = columns.length;
+    cluster.forEach((item) => {
+      item.totalColumns = totalCols;
+      result.push(item);
+    });
+  });
+
+  return result;
 };
 
 export default function App() {
-  // Fixed Schedule Scope default: Jan 20, 2026 to Jan 27, 2026
-  const [startDateStr, setStartDateStr] = useState(DEFAULT_START_DATE);
-  const [numDays, setNumDays] = useState(8); // Default 8 days: Jan 20 - Jan 27
-
-  // Fixed Daily Time Window default: 6:00 AM (360m) to 6:00 PM (1080m)
-  const [timeWindowMode, setTimeWindowMode] = useState('6am-6pm'); // '6am-6pm' or 'full24h'
-  
-  // Grid Zoom Ratio (Pixels per minute)
-  const [slotHeightRatio, setSlotHeightRatio] = useState(1.25); // ~15px per 12 mins
-
-  // Theme & Filters
-  const [darkMode, setDarkMode] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [showAnalytics, setShowAnalytics] = useState(false);
-
-  // Activity Blocks state with LocalStorage persistence
-  const [blocks, setBlocks] = useState(() => {
-    const saved = localStorage.getItem('jan20_jan27_planner_blocks_v2');
+  const [activities, setActivities] = useState(() => {
+    const saved = localStorage.getItem('planner_activities');
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error('Failed to parse saved schedule:', e);
-      }
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return generateJan20Jan27SampleBlocks();
+    return INITIAL_ACTIVITIES;
   });
 
-  // Save changes to LocalStorage
-  useEffect(() => {
-    localStorage.setItem('jan20_jan27_planner_blocks_v2', JSON.stringify(blocks));
-  }, [blocks]);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('planner_categories');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return DEFAULT_CATEGORIES;
+  });
 
-  // Dark Mode Class Sync
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategoryFilters, setActiveCategoryFilters] = useState([]);
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Expanded Single Day View Pop-up state (null or date string e.g. '2026-01-20')
+  const [selectedDayView, setSelectedDayView] = useState(null);
+
+  // Batch Selection & Deletion State
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Modals & Drawers
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // Drag & Resize State
+  const [dragState, setDragState] = useState(null);
+
+  // Save to LocalStorage
+  useEffect(() => {
+    localStorage.setItem('planner_activities', JSON.stringify(activities));
+  }, [activities]);
+
+  useEffect(() => {
+    localStorage.setItem('planner_categories', JSON.stringify(categories));
+  }, [categories]);
+
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -805,1110 +333,1292 @@ export default function App() {
     }
   }, [darkMode]);
 
-  const [editingBlock, setEditingBlock] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [undoToast, setUndoToast] = useState(null);
+  const toggleSelectActivity = (id) => {
+    setSelectedActivityIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
-  // Interactive Dragging / Resizing State
-  const [interaction, setInteraction] = useState(null);
-  // interaction = { type: 'drag'|'resize-top'|'resize-bottom'|'create', blockId, startX, startY, origDate, origStartMin, origDuration, tempDate, tempStartMin, tempDuration }
+  const handleSelectAll = () => {
+    const visibleIds = filteredActivities.map((a) => a.id);
+    setSelectedActivityIds(visibleIds);
+  };
 
-  const gridContainerRef = useRef(null);
+  const handleDeselectAll = () => {
+    setSelectedActivityIds([]);
+  };
 
-  // Daily visible minute boundaries
-  const visibleStartMin = timeWindowMode === '6am-6pm' ? 6 * 60 : 0; // 6:00 AM (360)
-  const visibleEndMin = timeWindowMode === '6am-6pm' ? 18 * 60 : 24 * 60; // 6:00 PM (1080)
-  const totalVisibleMins = visibleEndMin - visibleStartMin; // 720 mins (12 hrs)
+  const handleBatchDeleteConfirm = () => {
+    setActivities((prev) => prev.filter((act) => !selectedActivityIds.includes(act.id)));
+    setSelectedActivityIds([]);
+    setShowDeleteConfirm(false);
+    setIsBatchMode(false);
+  };
 
-  const daysList = useMemo(() => {
-    const list = [];
-    const baseDate = new Date(startDateStr);
-    for (let i = 0; i < numDays; i++) {
-      const d = new Date(baseDate);
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      list.push({ dateStr, dayName, monthDay, isWeekend, fullDateObj: d });
-    }
-    return list;
-  }, [startDateStr, numDays]);
+  const filteredActivities = useMemo(() => {
+    return activities.filter((act) => {
+      const matchesSearch =
+        act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (act.notes && act.notes.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const getYToMinutes = useCallback(
-    (offsetY) => {
-      const minFromTop = offsetY / slotHeightRatio;
-      const rawMin = visibleStartMin + minFromTop;
-      // Snap strictly to nearest 5 minutes
-      const snapped = Math.round(rawMin / 5) * 5;
-      return Math.max(visibleStartMin, Math.min(visibleEndMin - 5, snapped));
-    },
-    [slotHeightRatio, visibleStartMin, visibleEndMin]
-  );
+      const matchesCategory =
+        activeCategoryFilters.length === 0 || activeCategoryFilters.includes(act.categoryId);
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [activities, searchQuery, activeCategoryFilters]);
+
+  const categoryMap = useMemo(() => {
+    const map = {};
+    categories.forEach((cat) => {
+      map[cat.id] = cat;
+    });
+    return map;
+  }, [categories]);
+
+  const handleMouseDown = (e, activity, type, viewType = 'main') => {
+    if (isBatchMode) return;
+    e.stopPropagation();
+
+    const hourHeight = viewType === 'dayView' ? DAY_VIEW_HOUR_HEIGHT : MAIN_HOUR_HEIGHT;
+
+    setDragState({
+      id: activity.id,
+      type, // 'move', 'resize-top', 'resize-bottom'
+      startY: e.clientY,
+      initialStart: timeToMinutes(activity.startTime),
+      initialEnd: timeToMinutes(activity.endTime),
+      date: activity.date,
+      hourHeight,
+    });
+  };
 
   useEffect(() => {
-    if (!interaction) return;
+    if (!dragState) return;
 
-    const handlePointerMove = (e) => {
-      if (!gridContainerRef.current) return;
-      const rect = gridContainerRef.current.getBoundingClientRect();
+    const handleMouseMove = (e) => {
+      const deltaY = e.clientY - dragState.startY;
+      const hourH = dragState.hourHeight || MAIN_HOUR_HEIGHT;
+      // Convert pixels to 5-minute rounded intervals
+      const minutesDelta = Math.round((deltaY / hourH) * 60 / 5) * 5;
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+      setActivities((prev) =>
+        prev.map((act) => {
+          if (act.id !== dragState.id) return act;
 
-      // Determine date column
-      const colWidth = rect.width / daysList.length;
-      const targetColIndex = Math.max(0, Math.min(daysList.length - 1, Math.floor(mouseX / colWidth)));
-      const targetDateStr = daysList[targetColIndex].dateStr;
+          let newStart = dragState.initialStart;
+          let newEnd = dragState.initialEnd;
+          const duration = dragState.initialEnd - dragState.initialStart;
 
-      const snappedMin = getYToMinutes(mouseY);
+          if (dragState.type === 'move') {
+            newStart = Math.max(
+              GRID_START_MINUTES,
+              Math.min(GRID_END_MINUTES - duration, dragState.initialStart + minutesDelta)
+            );
+            newEnd = newStart + duration;
+          } else if (dragState.type === 'resize-top') {
+            newStart = Math.max(
+              GRID_START_MINUTES,
+              Math.min(dragState.initialEnd - 15, dragState.initialStart + minutesDelta)
+            );
+          } else if (dragState.type === 'resize-bottom') {
+            newEnd = Math.min(
+              GRID_END_MINUTES,
+              Math.max(dragState.initialStart + 15, dragState.initialEnd + minutesDelta)
+            );
+          }
 
-      setInteraction((prev) => {
-        if (!prev) return null;
-        if (prev.type === 'drag') {
-          const maxStart = visibleEndMin - prev.origDuration;
-          const newStart = Math.max(visibleStartMin, Math.min(maxStart, snappedMin));
           return {
-            ...prev,
-            tempDate: targetDateStr,
-            tempStartMin: newStart
+            ...act,
+            startTime: minutesToTime(newStart),
+            endTime: minutesToTime(newEnd),
           };
-        } else if (prev.type === 'resize-bottom') {
-          const newDuration = Math.max(5, snappedMin - prev.tempStartMin);
-          const maxDuration = visibleEndMin - prev.tempStartMin;
-          return {
-            ...prev,
-            tempDuration: Math.min(maxDuration, newDuration)
-          };
-        } else if (prev.type === 'resize-top') {
-          const currentEndMin = prev.origStartMin + prev.origDuration;
-          const newStartMin = Math.min(currentEndMin - 5, Math.max(visibleStartMin, snappedMin));
-          const newDuration = currentEndMin - newStartMin;
-          return {
-            ...prev,
-            tempStartMin: newStartMin,
-            tempDuration: newDuration
-          };
-        } else if (prev.type === 'create') {
-          const start = Math.min(prev.origStartMin, snappedMin);
-          const end = Math.max(prev.origStartMin + 5, snappedMin + 5);
-          return {
-            ...prev,
-            tempDate: targetDateStr,
-            tempStartMin: start,
-            tempDuration: end - start
-          };
-        }
-        return prev;
-      });
+        })
+      );
     };
 
-    const handlePointerUp = () => {
-      if (!interaction) return;
-
-      if (interaction.type === 'create') {
-        const newBlock = {
-          id: `block-${Date.now()}`,
-          date: interaction.tempDate,
-          startMin: interaction.tempStartMin,
-          duration: Math.max(15, interaction.tempDuration),
-          title: 'New Activity',
-          description: '',
-          category: 'Work',
-          color: PRESET_COLORS[0].bg,
-          location: ''
-        };
-        setEditingBlock(newBlock);
-        setIsModalOpen(true);
-      } else {
-        setBlocks((prev) =>
-          prev.map((b) =>
-            b.id === interaction.blockId
-              ? {
-                  ...b,
-                  date: interaction.tempDate,
-                  startMin: interaction.tempStartMin,
-                  duration: interaction.tempDuration
-                }
-              : b
-          )
-        );
-      }
-      setInteraction(null);
+    const handleMouseUp = () => {
+      setDragState(null);
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [interaction, daysList, getYToMinutes, visibleStartMin, visibleEndMin]);
+  }, [dragState]);
 
-  const handleStartDrag = (e, block, type = 'drag') => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleGridCellClick = (dateStr, clickedMinute) => {
+    if (isBatchMode) return;
+    const snappedStart = Math.round(clickedMinute / 5) * 5;
+    const snappedEnd = Math.min(GRID_END_MINUTES, snappedStart + 60);
 
-    setInteraction({
-      type,
-      blockId: block.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      origDate: block.date,
-      origStartMin: block.startMin,
-      origDuration: block.duration,
-      tempDate: block.date,
-      tempStartMin: block.startMin,
-      tempDuration: block.duration
-    });
-  };
-
-  const handleGridMouseDown = (e) => {
-    if (e.target.dataset.gridBg !== 'true') return;
-
-    const rect = gridContainerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const colWidth = rect.width / daysList.length;
-    const targetColIndex = Math.max(0, Math.min(daysList.length - 1, Math.floor(mouseX / colWidth)));
-    const targetDateStr = daysList[targetColIndex].dateStr;
-    const snappedMin = getYToMinutes(mouseY);
-
-    setInteraction({
-      type: 'create',
-      blockId: null,
-      startX: e.clientX,
-      startY: e.clientY,
-      origDate: targetDateStr,
-      origStartMin: snappedMin,
-      origDuration: 15,
-      tempDate: targetDateStr,
-      tempStartMin: snappedMin,
-      tempDuration: 15
-    });
-  };
-
-  const handleOpenNewModal = () => {
-    const newBlock = {
-      id: `block-${Date.now()}`,
-      date: daysList[0]?.dateStr || DEFAULT_START_DATE,
-      startMin: 9 * 60, // 9:00 AM
-      duration: 60,
+    setEditingActivity({
+      id: 'act-' + Date.now(),
       title: 'New Activity',
-      description: '',
-      category: 'Work',
-      color: PRESET_COLORS[0].bg,
-      location: ''
-    };
-    setEditingBlock(newBlock);
-    setIsModalOpen(true);
-  };
-
-  const handleSaveModal = (updatedBlock) => {
-    setBlocks((prev) => {
-      const exists = prev.some((b) => b.id === updatedBlock.id);
-      if (exists) {
-        return prev.map((b) => (b.id === updatedBlock.id ? updatedBlock : b));
-      } else {
-        return [...prev, updatedBlock];
-      }
-    });
-    setIsModalOpen(false);
-    setEditingBlock(null);
-  };
-
-  const handleDeleteBlock = (blockId) => {
-    const targetBlock = blocks.find((b) => b.id === blockId);
-    if (!targetBlock) return;
-
-    setBlocks((prev) => prev.filter((b) => b.id !== blockId));
-    setIsModalOpen(false);
-
-    if (undoToast?.timeoutId) clearTimeout(undoToast.timeoutId);
-    const timeoutId = setTimeout(() => {
-      setUndoToast(null);
-    }, 6000);
-
-    setUndoToast({
-      block: targetBlock,
-      message: `Deleted "${targetBlock.title}"`,
-      timeoutId
+      date: dateStr,
+      startTime: minutesToTime(snappedStart),
+      endTime: minutesToTime(snappedEnd),
+      categoryId: categories[0]?.id || '',
+      notes: '',
+      isNew: true,
     });
   };
 
-  const handleUndoDelete = () => {
-    if (!undoToast) return;
-    setBlocks((prev) => [...prev, undoToast.block]);
-    if (undoToast.timeoutId) clearTimeout(undoToast.timeoutId);
-    setUndoToast(null);
-  };
-
-  const handleDuplicateBlock = (blockToDuplicate) => {
-    const duplicated = {
-      ...blockToDuplicate,
-      id: `block-${Date.now()}`,
-      title: `${blockToDuplicate.title} (Copy)`,
-      startMin: Math.min(visibleEndMin - blockToDuplicate.duration, blockToDuplicate.startMin + 30)
-    };
-    setBlocks((prev) => [...prev, duplicated]);
-  };
-
-  const handleResetToSample = () => {
-    setStartDateStr(DEFAULT_START_DATE);
-    setNumDays(8);
-    setTimeWindowMode('6am-6pm');
-    setBlocks(generateJan20Jan27SampleBlocks());
-  };
-
-  const filteredBlocks = useMemo(() => {
-    return blocks.filter((b) => {
-      const matchesSearch =
-        b.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (b.location && b.location.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesCat = selectedCategory === 'All' || b.category === selectedCategory;
-      return matchesSearch && matchesCat;
-    });
-  }, [blocks, searchTerm, selectedCategory]);
-
-  const layoutBlocks = useMemo(() => {
-    // Organize blocks by date
-    const dateMap = {};
-    daysList.forEach((d) => {
-      dateMap[d.dateStr] = [];
-    });
-
-    filteredBlocks.forEach((b) => {
-      if (dateMap[b.date]) {
-        dateMap[b.date].push(b);
-      }
-    });
-
-    const positioned = [];
-
-    Object.keys(dateMap).forEach((dateStr) => {
-      const dayBlocks = dateMap[dateStr].sort((a, b) => a.startMin - b.startMin || b.duration - a.duration);
-
-      // Simple greedy column layout calculation for overlapping intervals
-      const columns = []; // array of end times for each column
-
-      dayBlocks.forEach((block) => {
-        const blockEnd = block.startMin + block.duration;
-        let placed = false;
-
-        for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-          if (columns[colIdx] <= block.startMin) {
-            columns[colIdx] = blockEnd;
-            block._colIndex = colIdx;
-            placed = true;
-            break;
-          }
-        }
-
-        if (!placed) {
-          block._colIndex = columns.length;
-          columns.push(blockEnd);
-        }
-      });
-
-      // Assign total columns for overlapping cluster calculation
-      dayBlocks.forEach((block) => {
-        const blockEnd = block.startMin + block.duration;
-        // Count how many blocks overlap with this block
-        const overlapping = dayBlocks.filter(
-          (other) => block.startMin < other.startMin + other.duration && blockEnd > other.startMin
-        );
-        const maxCol = Math.max(...overlapping.map((o) => o._colIndex || 0), 0) + 1;
-        block._totalCols = Math.max(maxCol, 1);
-        positioned.push(block);
-      });
-    });
-
-    return positioned;
-  }, [filteredBlocks, daysList]);
-
-  const analyticsSummary = useMemo(() => {
-    const categoryTotals = {};
-    let totalScheduledMins = 0;
-
-    blocks.forEach((b) => {
-      const mins = b.duration || 0;
-      totalScheduledMins += mins;
-      const cat = b.category || 'Work';
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + mins;
-    });
-
-    const totalAvailableMins = daysList.length * totalVisibleMins;
-    const utilizationPercent = Math.min(100, Math.round((totalScheduledMins / totalAvailableMins) * 100));
-
-    const categoryList = Object.entries(categoryTotals)
-      .map(([cat, mins]) => ({
-        category: cat,
-        mins,
-        hours: (mins / 60).toFixed(1),
-        percent: totalScheduledMins > 0 ? Math.round((mins / totalScheduledMins) * 100) : 0
-      }))
-      .sort((a, b) => b.mins - a.mins);
-
-    return {
-      totalHours: (totalScheduledMins / 60).toFixed(1),
-      totalBlocks: blocks.length,
-      utilizationPercent,
-      categoryList
-    };
-  }, [blocks, daysList, totalVisibleMins]);
-
-  const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(blocks, null, 2));
+  const exportJSON = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ activities, categories }, null, 2));
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `schedule-jan20-jan27-${startDateStr}.json`);
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `schedule_planner_export_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
   };
 
-  const handleImportJSON = (e) => {
+  const exportCSV = () => {
+    let csv = "ID,Title,Date,Start Time,End Time,Category,Notes\n";
+    activities.forEach(act => {
+      const catName = categoryMap[act.categoryId]?.name || 'Uncategorized';
+      const cleanNotes = (act.notes || '').replace(/"/g, '""');
+      csv += `"${act.id}","${act.title}","${act.date}","${act.startTime}","${act.endTime}","${catName}","${cleanNotes}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `schedule_planner_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const importJSON = (e) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], 'UTF-8');
-      fileReader.onload = (event) => {
+      fileReader.readAsText(e.target.files[0], "UTF-8");
+      fileReader.onload = (e) => {
         try {
-          const parsed = JSON.parse(event.target.result);
-          if (Array.isArray(parsed)) {
-            setBlocks(parsed);
-          }
+          const parsed = JSON.parse(e.target.result);
+          if (parsed.activities) setActivities(parsed.activities);
+          if (parsed.categories) setCategories(parsed.categories);
         } catch (err) {
-          alert('Invalid schedule JSON file format.');
+          console.error("Invalid JSON format", err);
         }
       };
     }
   };
 
-  const handleExportCSV = () => {
-    let csvContent = 'data:text/csv;charset=utf-8,';
-    csvContent += 'ID,Date,Start Time,End Time,Duration (Mins),Title,Category,Location,Description\n';
+  const categoryAnalytics = useMemo(() => {
+    const totals = {};
+    let grandTotalMins = 0;
 
-    blocks.forEach((b) => {
-      const startStr = minutesToFormattedTime(b.startMin);
-      const endStr = minutesToFormattedTime(b.startMin + b.duration);
-      const row = [
-        b.id,
-        b.date,
-        `"${startStr}"`,
-        `"${endStr}"`,
-        b.duration,
-        `"${b.title.replace(/"/g, '""')}"`,
-        `"${(b.category || '').replace(/"/g, '""')}"`,
-        `"${(b.location || '').replace(/"/g, '""')}"`,
-        `"${(b.description || '').replace(/"/g, '""')}"`
-      ].join(',');
-      csvContent += row + '\n';
+    categories.forEach((cat) => {
+      totals[cat.id] = { ...cat, totalMinutes: 0, count: 0 };
     });
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `schedule-jan20-jan27-${startDateStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
+    activities.forEach((act) => {
+      const start = timeToMinutes(act.startTime);
+      const end = timeToMinutes(act.endTime);
+      const duration = Math.max(0, end - start);
+      grandTotalMins += duration;
+
+      if (totals[act.categoryId]) {
+        totals[act.categoryId].totalMinutes += duration;
+        totals[act.categoryId].count += 1;
+      }
+    });
+
+    return Object.values(totals).map((item) => ({
+      ...item,
+      hours: (item.totalMinutes / 60).toFixed(1),
+      percentage: grandTotalMins > 0 ? Math.round((item.totalMinutes / grandTotalMins) * 100) : 0,
+    }));
+  }, [activities, categories]);
 
   return (
-    <div className={`min-h-screen font-sans flex flex-col ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       
-      {/* Top Header Navigation */}
-      <header className={`sticky top-0 z-30 px-4 py-3 border-b shadow-sm backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
+      {/* HEADER BAR */}
+      <header className={`border-b sticky top-0 z-30 backdrop-blur-md ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           
-          {/* Logo & Schedule Scope Title */}
-          <div className="flex items-center gap-3 w-full lg:w-auto justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25">
-                <Icons.Calendar />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-extrabold leading-tight tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
-                    Schedule Planner
-                  </h1>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    Jan 20 – Jan 27, 2026
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">5-Minute Precision Grid • 6:00 AM – 6:00 PM Scope</p>
-              </div>
+          {/* Logo & Title */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2">
+                2-Week Schedule Planner
+                <span className="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Jan 20-27
+                </span>
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Click any day header to expand into Single Day View
+              </p>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="flex-1 max-w-xs relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search activities or notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border outline-none transition-all ${
+                darkMode
+                  ? 'bg-slate-800 border-slate-700 focus:border-indigo-500 text-slate-100 placeholder-slate-500'
+                  : 'bg-slate-100 border-slate-200 focus:border-indigo-500 text-slate-800 placeholder-slate-400'
+              }`}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Action Tools & Toggles */}
+          <div className="flex items-center gap-2">
+            
+            {/* Multi-Select / Batch Mode Button */}
+            <button
+              onClick={() => {
+                setIsBatchMode(!isBatchMode);
+                setSelectedActivityIds([]);
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 ${
+                isBatchMode
+                  ? 'bg-rose-500 text-white border-rose-600 shadow-md shadow-rose-500/20'
+                  : darkMode
+                  ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+            >
+              <CheckSquare className="w-4 h-4" />
+              {isBatchMode ? 'Cancel Selection' : 'Batch Delete'}
+            </button>
+
+            {/* Category Manager */}
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className={`p-2 rounded-lg border transition-all ${
+                darkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Manage Categories & Colors"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            {/* Analytics Modal Toggle */}
+            <button
+              onClick={() => setShowAnalytics(true)}
+              className={`p-2 rounded-lg border transition-all ${
+                darkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Time Utilization Analytics"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+
+            {/* Export & Import */}
+            <div className="flex items-center border rounded-lg overflow-hidden dark:border-slate-700 border-slate-200">
+              <button
+                onClick={exportJSON}
+                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                title="Export JSON Backup"
+              >
+                <FileCode className="w-4 h-4" />
+              </button>
+              <button
+                onClick={exportCSV}
+                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200"
+                title="Export CSV Table"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+              </button>
+              <label
+                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200 cursor-pointer"
+                title="Import JSON"
+              >
+                <Upload className="w-4 h-4" />
+                <input type="file" accept=".json" onChange={importJSON} className="hidden" />
+              </label>
             </div>
 
+            {/* Light / Dark Mode Toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="lg:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+              className={`p-2 rounded-lg border transition-all ${
+                darkMode
+                  ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Toggle Dark Mode"
             >
-              {darkMode ? <Icons.Sun /> : <Icons.Moon />}
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            {/* Add New Activity Button */}
+            <button
+              onClick={() =>
+                setEditingActivity({
+                  id: 'act-' + Date.now(),
+                  title: '',
+                  date: SCHEDULE_DATES[0],
+                  startTime: '09:00',
+                  endTime: '10:00',
+                  categoryId: categories[0]?.id || '',
+                  notes: '',
+                  isNew: true,
+                })
+              }
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New Activity
             </button>
           </div>
+        </div>
 
-          {/* Center Date Quick Jump & Scope controls */}
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold w-full lg:w-auto justify-center">
-            <button
-              onClick={() => {
-                setStartDateStr('2026-01-20');
-                setNumDays(8);
-              }}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                startDateStr === '2026-01-20' && numDays === 8
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              Jan 20 – Jan 27 (8 Days)
-            </button>
-
-            <button
-              onClick={() => {
-                setStartDateStr('2026-01-20');
-                setNumDays(4);
-              }}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                startDateStr === '2026-01-20' && numDays === 4
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              Jan 20 – 23
-            </button>
-
-            <button
-              onClick={() => {
-                setStartDateStr('2026-01-24');
-                setNumDays(4);
-              }}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                startDateStr === '2026-01-24' && numDays === 4
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              Jan 24 – 27
-            </button>
+        {}
+        <div className={`px-4 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100/70 border-slate-200'}`}>
+          
+          {/* Category Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5" /> Filter:
+            </span>
+            {categories.map((cat) => {
+              const isActive = activeCategoryFilters.includes(cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() =>
+                    setActiveCategoryFilters((prev) =>
+                      isActive ? prev.filter((id) => id !== cat.id) : [...prev, cat.id]
+                    )
+                  }
+                  className={`px-2.5 py-1 rounded-full font-medium transition-all flex items-center gap-1.5 border ${
+                    isActive
+                      ? 'border-transparent text-white shadow-sm'
+                      : darkMode
+                      ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? cat.color : undefined,
+                  }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: isActive ? '#fff' : cat.color }}
+                  />
+                  {cat.name}
+                </button>
+              );
+            })}
+            {activeCategoryFilters.length > 0 && (
+              <button
+                onClick={() => setActiveCategoryFilters([])}
+                className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-semibold ml-1"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
 
-          {/* Action Toolbar */}
-          <div className="flex items-center gap-2 w-full lg:w-auto justify-end flex-wrap">
-            <button
-              onClick={() => setShowAnalytics(!showAnalytics)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
-                showAnalytics
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 dark:bg-indigo-950 dark:border-indigo-700 dark:text-indigo-300'
-                  : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Icons.PieChart />
-              <span>Analytics</span>
-            </button>
-
-            <button
-              onClick={handleResetToSample}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Reset Schedule back to Jan 20-27 defaults"
-            >
-              <Icons.Sparkles />
-              <span>Reset Defaults</span>
-            </button>
-
-            <button
-              onClick={handleOpenNewModal}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 transition-all"
-            >
-              <Icons.Plus />
-              <span>Add Activity</span>
-            </button>
-
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="hidden lg:flex p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title="Toggle Dark/Light Mode"
-            >
-              {darkMode ? <Icons.Sun /> : <Icons.Moon />}
-            </button>
-          </div>
-
+          {/* Batch Mode Top Toolbar Context */}
+          {isBatchMode && (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                <CheckSquare className="w-3.5 h-3.5" /> Select Mode Active
+              </span>
+              <button
+                onClick={handleSelectAll}
+                className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 font-medium text-xs"
+              >
+                Select All
+              </button>
+              <button
+                onClick={handleDeselectAll}
+                className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 font-medium text-xs"
+              >
+                Deselect All
+              </button>
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold">
+                {selectedActivityIds.length} Selected
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
-      <div className={`px-4 py-2.5 border-b text-xs transition-colors ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-100/70 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      {}
+      <main className="flex-1 overflow-x-auto p-4 max-w-[1600px] w-full mx-auto">
+        <div className={`min-w-[1100px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           
-          {/* Time Scope & Date Picker */}
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <label className="font-semibold text-slate-600 dark:text-slate-400">Start Date:</label>
-              <input
-                type="date"
-                value={startDateStr}
-                onChange={(e) => setStartDateStr(e.target.value)}
-                className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="font-semibold text-slate-600 dark:text-slate-400">Time Scope:</label>
-              <button
-                onClick={() => setTimeWindowMode(timeWindowMode === '6am-6pm' ? 'full24h' : '6am-6pm')}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
-                  timeWindowMode === '6am-6pm'
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'
-                }`}
-              >
-                {timeWindowMode === '6am-6pm' ? '6:00 AM – 6:00 PM (12 Hours)' : 'Full Day (24 Hours)'}
-              </button>
-            </div>
-          </div>
-
-          {/* Search & Category Filter */}
-          <div className="flex items-center gap-2 flex-grow max-w-md">
-            <div className="relative w-full">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400 pointer-events-none">
-                <Icons.Search />
-              </span>
-              <input
-                type="text"
-                placeholder="Search activities or notes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-            >
-              <option value="All">All Categories</option>
-              {PRESET_COLORS.map((c) => (
-                <option key={c.category} value={c.category}>
-                  {c.category}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Zoom Slider & Export Buttons */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5" title="Adjust vertical grid zoom scale">
-              <span className="text-slate-400"><Icons.ZoomOut /></span>
-              <input
-                type="range"
-                min="0.8"
-                max="2.2"
-                step="0.1"
-                value={slotHeightRatio}
-                onChange={(e) => setSlotHeightRatio(parseFloat(e.target.value))}
-                className="w-20 accent-indigo-600 cursor-pointer"
-              />
-              <span className="text-slate-400"><Icons.ZoomIn /></span>
-            </div>
-
-            <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
-
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleExportJSON}
-                className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                title="Export Schedule JSON"
-              >
-                <Icons.Download />
-              </button>
-
-              <label
-                className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
-                title="Import Schedule JSON"
-              >
-                <Icons.Upload />
-                <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
-              </label>
-
-              <button
-                onClick={handleExportCSV}
-                className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
-                title="Export CSV Spreadsheet"
-              >
-                CSV
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {showAnalytics && (
-        <div className={`p-4 border-b transition-all ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-indigo-50/60 border-indigo-100'}`}>
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
-                <Icons.PieChart />
-                <span>Schedule Utilization & Category Breakdown</span>
-              </h3>
-              <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-4">
-                <span>
-                  Total Scheduled: <strong className="text-indigo-600 dark:text-indigo-400 text-sm">{analyticsSummary.totalHours} hrs</strong> ({analyticsSummary.totalBlocks} activities)
-                </span>
-                <span>
-                  6 AM – 6 PM Utilization: <strong className="text-emerald-600 dark:text-emerald-400 text-sm">{analyticsSummary.utilizationPercent}%</strong>
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-              {analyticsSummary.categoryList.map((item) => {
-                const colorObj = PRESET_COLORS.find((c) => c.category === item.category);
-                const bgHex = colorObj ? colorObj.bg : '#6366f1';
-                return (
-                  <div key={item.category} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold truncate text-slate-700 dark:text-slate-200">{item.category}</span>
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: bgHex }} />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-base font-extrabold text-slate-900 dark:text-white">{item.hours}h</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{item.percent}% of schedule</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <main className="flex-1 overflow-auto p-2 sm:p-4 relative">
-        <div className="max-w-7xl mx-auto border rounded-2xl shadow-xl overflow-hidden flex flex-col bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-          
-          {/* Day Headers Row */}
-          <div className="flex border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 bg-slate-100/95 dark:bg-slate-800/95 backdrop-blur">
-            {/* Time Corner Column */}
-            <div className="w-16 sm:w-20 flex-shrink-0 p-2 text-center border-r border-slate-200 dark:border-slate-700 flex items-center justify-center font-extrabold text-[11px] text-slate-500 dark:text-slate-400 tracking-wider">
-              TIME
-            </div>
-
-            {/* Days Columns Headers */}
-            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${daysList.length}, minmax(0, 1fr))` }}>
-              {daysList.map((dayItem) => {
-                const dayMins = blocks
-                  .filter((b) => b.date === dayItem.dateStr)
-                  .reduce((acc, b) => acc + (b.duration || 0), 0);
-                const dayHours = (dayMins / 60).toFixed(1);
-
-                return (
-                  <div
-                    key={dayItem.dateStr}
-                    className={`p-2 text-center border-r last:border-r-0 border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center ${
-                      dayItem.isWeekend ? 'bg-slate-200/50 dark:bg-slate-800/40' : ''
-                    }`}
-                  >
-                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
-                      {dayItem.dayName}
-                    </span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">
-                      {dayItem.monthDay}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5">
-                      {dayHours}h scheduled
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex relative">
+          {/* STICKY DATE HEADER (8 DAYS) */}
+          <div className={`grid grid-cols-9 sticky top-[108px] z-20 border-b ${darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'}`}>
             
-            {/* Time Slot Labels Column */}
-            <div className="w-16 sm:w-20 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 select-none">
-              {Array.from({ length: totalVisibleMins / 60 }, (_, i) => {
-                const hourMin = visibleStartMin + i * 60;
-                const heightPx = 60 * slotHeightRatio;
+            {/* Time Column Header */}
+            <div className="p-3 border-r dark:border-slate-800 border-slate-200 font-semibold text-xs text-center flex items-center justify-center gap-1 text-slate-400">
+              <Clock className="w-3.5 h-3.5" /> Time
+            </div>
+
+            {/* Days Columns Headers (Clicking opens expanded single day view) */}
+            {SCHEDULE_DATES.map((dateStr) => {
+              const { dayName, formattedDate } = formatDateLabel(dateStr);
+              const dayCount = filteredActivities.filter((a) => a.date === dateStr).length;
+
+              return (
+                <div
+                  key={dateStr}
+                  onClick={() => setSelectedDayView(dateStr)}
+                  className="p-3 border-r last:border-r-0 dark:border-slate-800 border-slate-200 text-center cursor-pointer group hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition-all relative"
+                  title="Click to open Expanded Single Day View"
+                >
+                  <div className="font-bold text-sm tracking-tight flex items-center justify-center gap-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    {dayName}
+                    <Maximize2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center justify-center gap-1 mt-0.5">
+                    <span>{formattedDate}</span>
+                    {dayCount > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">
+                        {dayCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* TIMETABLE GRID BODY */}
+          <div className="grid grid-cols-9 relative" style={{ height: `${MAIN_GRID_HEIGHT}px` }}>
+            
+            {/* TIME SLOTS AXIS (LEFT COLUMN) */}
+            <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${darkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
+              {Array.from({ length: 12 }).map((_, idx) => {
+                const hourMins = GRID_START_MINUTES + idx * 60;
                 return (
                   <div
-                    key={hourMin}
-                    style={{ height: `${heightPx}px` }}
-                    className="border-b border-slate-200/80 dark:border-slate-800/80 text-[11px] font-bold text-slate-400 dark:text-slate-500 pr-2 pt-1 text-right"
+                    key={idx}
+                    className="border-b dark:border-slate-800/60 border-slate-200/80 pr-2 text-right font-medium text-xs text-slate-400 flex items-start justify-end pt-1"
+                    style={{ height: `${MAIN_HOUR_HEIGHT}px` }}
                   >
-                    {minutesToFormattedTime(hourMin)}
+                    {formatDisplayTime(minutesToTime(hourMins))}
                   </div>
                 );
               })}
             </div>
 
-            {/* Grid Area with 5-minute Snapping Canvas */}
-            <div
-              ref={gridContainerRef}
-              onMouseDown={handleGridMouseDown}
-              data-grid-bg="true"
-              className="flex-1 relative cursor-crosshair select-none min-w-0"
-              style={{ height: `${totalVisibleMins * slotHeightRatio}px` }}
-            >
-              {/* Subdivision Grid Lines (5 min dashed, 30 min half-hour, 60 min hour) */}
-              {Array.from({ length: totalVisibleMins / 5 }, (_, i) => {
-                const stepMins = i * 5;
-                const topPx = stepMins * slotHeightRatio;
-                const isHour = stepMins % 60 === 0;
-                const isHalfHour = stepMins % 30 === 0;
+            {/* DAY COLUMNS & ACTIVITIES */}
+            {SCHEDULE_DATES.map((dateStr) => {
+              const dayActivities = filteredActivities.filter((a) => a.date === dateStr);
+              const layoutItems = calculateOverlaps(dayActivities);
 
-                return (
-                  <div
-                    key={stepMins}
-                    data-grid-bg="true"
-                    style={{ top: `${topPx}px` }}
-                    className={`absolute left-0 right-0 pointer-events-none ${
-                      isHour
-                        ? 'border-b border-slate-300 dark:border-slate-700/80'
-                        : isHalfHour
-                        ? 'border-b border-slate-200/60 dark:border-slate-800/60'
-                        : 'border-b border-dashed border-slate-100/50 dark:border-slate-800/20'
-                    }`}
-                  />
-                );
-              })}
-
-              {/* Vertical Column Day Dividers */}
-              <div
-                data-grid-bg="true"
-                className="absolute inset-0 grid pointer-events-none"
-                style={{ gridTemplateColumns: `repeat(${daysList.length}, minmax(0, 1fr))` }}
-              >
-                {daysList.map((d) => (
-                  <div key={d.dateStr} data-grid-bg="true" className="border-r last:border-r-0 border-slate-200/60 dark:border-slate-800/60 h-full" />
-                ))}
-              </div>
-
-              {layoutBlocks.map((block) => {
-                const dayIndex = daysList.findIndex((d) => d.dateStr === block.date);
-                if (dayIndex === -1) return null;
-
-                const colWidthPercent = 100 / daysList.length;
-
-                // Handle Dragging state calculation
-                const isDragging = interaction && interaction.blockId === block.id;
-                const displayDate = isDragging ? interaction.tempDate : block.date;
-                const displayStartMin = isDragging ? interaction.tempStartMin : block.startMin;
-                const displayDuration = isDragging ? interaction.tempDuration : block.duration;
-
-                const displayDayIndex = daysList.findIndex((d) => d.dateStr === displayDate);
-                if (displayDayIndex === -1) return null;
-
-                // Side-by-side overlapping column width calculation
-                const totalOverlapCols = block._totalCols || 1;
-                const colIndexInsideDay = block._colIndex || 0;
-                const subColWidthPercent = colWidthPercent / totalOverlapCols;
-                const displayLeftPercent = displayDayIndex * colWidthPercent + colIndexInsideDay * subColWidthPercent;
-
-                const topPx = (displayStartMin - visibleStartMin) * slotHeightRatio;
-                const heightPx = Math.max(14, displayDuration * slotHeightRatio);
-
-                // Skip rendering if block is completely outside current visible time window
-                if (topPx + heightPx < 0 || topPx > totalVisibleMins * slotHeightRatio) return null;
-
-                return (
-                  <div
-                    key={block.id}
-                    onMouseDown={(e) => handleStartDrag(e, block, 'drag')}
-                    style={{
-                      left: `${displayLeftPercent}%`,
-                      width: `${subColWidthPercent}%`,
-                      top: `${topPx}px`,
-                      height: `${heightPx}px`,
-                      backgroundColor: block.color || '#3b82f6'
-                    }}
-                    className={`absolute p-1.5 rounded-xl shadow-md border border-black/10 text-white transition-shadow cursor-grab active:cursor-grabbing overflow-hidden group flex flex-col justify-between ${
-                      isDragging ? 'z-30 opacity-90 ring-4 ring-indigo-400 scale-[0.98]' : 'z-10 hover:z-20 hover:shadow-xl'
-                    }`}
-                  >
-                    {/* Top Resize Handle */}
+              return (
+                <div
+                  key={dateStr}
+                  className="border-r last:border-r-0 dark:border-slate-800 border-slate-200 relative group transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickY = e.clientY - rect.top;
+                    const clickedMinute = GRID_START_MINUTES + (clickY / MAIN_GRID_HEIGHT) * TOTAL_MINUTES;
+                    handleGridCellClick(dateStr, clickedMinute);
+                  }}
+                >
+                  {}
+                  {/* Hourly Horizontal Background Lines */}
+                  {Array.from({ length: 12 }).map((_, idx) => (
                     <div
-                      onMouseDown={(e) => handleStartDrag(e, block, 'resize-top')}
-                      className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-white/40 z-20 rounded-t-xl"
-                      title="Drag to adjust start time in 5-min steps"
+                      key={idx}
+                      className="border-b dark:border-slate-800/40 border-slate-100 pointer-events-none"
+                      style={{ height: `${MAIN_HOUR_HEIGHT}px` }}
                     />
+                  ))}
 
-                    {/* Block Label & Content */}
-                    <div className="pointer-events-none flex flex-col justify-between h-full overflow-hidden">
-                      <div>
-                        <div className="flex items-center justify-between gap-1 leading-tight">
-                          <span className="font-bold text-xs truncate drop-shadow-sm">{block.title}</span>
-                          {heightPx > 28 && (
-                            <span className="text-[9px] font-mono font-bold whitespace-nowrap bg-black/25 px-1 py-0.5 rounded">
-                              {minutesToFormattedTime(displayStartMin)}
-                            </span>
+                  {/* Half-Hour Guidelines */}
+                  {Array.from({ length: 12 }).map((_, idx) => (
+                    <div
+                      key={`sub-${idx}`}
+                      className="border-b border-dashed dark:border-slate-800/20 border-slate-100 pointer-events-none absolute w-full"
+                      style={{ top: `${(idx + 0.5) * MAIN_HOUR_HEIGHT}px` }}
+                    />
+                  ))}
+
+                  {/* Activity Blocks */}
+                  {layoutItems.map((act) => {
+                    const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
+                    const startMins = timeToMinutes(act.startTime);
+                    const endMins = timeToMinutes(act.endTime);
+                    
+                    const topPx = ((startMins - GRID_START_MINUTES) / TOTAL_MINUTES) * MAIN_GRID_HEIGHT;
+                    const heightPx = ((endMins - startMins) / TOTAL_MINUTES) * MAIN_GRID_HEIGHT;
+
+                    const widthPercent = 100 / (act.totalColumns || 1);
+                    const leftPercent = (act.columnIndex || 0) * widthPercent;
+
+                    const isSelected = selectedActivityIds.includes(act.id);
+
+                    return (
+                      <div
+                        key={act.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isBatchMode) {
+                            toggleSelectActivity(act.id);
+                          } else {
+                            setEditingActivity({ ...act });
+                          }
+                        }}
+                        style={{
+                          top: `${topPx}px`,
+                          height: `${Math.max(24, heightPx)}px`,
+                          left: `${leftPercent}%`,
+                          width: `${widthPercent}%`,
+                          backgroundColor: `${category.color}22`,
+                          borderColor: category.color,
+                        }}
+                        className={`absolute rounded-lg border-l-4 border-y border-r p-1.5 text-xs shadow-sm cursor-pointer transition-all duration-75 overflow-hidden flex flex-col justify-between group/card ${
+                          isSelected ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/20' : 'hover:shadow-md hover:z-10'
+                        } ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}
+                      >
+                        {/* Top Resize Handle */}
+                        {!isBatchMode && (
+                          <div
+                            onMouseDown={(e) => handleMouseDown(e, act, 'resize-top', 'main')}
+                            className="absolute top-0 left-0 right-0 h-2 cursor-n-resize hover:bg-slate-400/40 opacity-0 group-hover/card:opacity-100 z-10 rounded-t"
+                          />
+                        )}
+
+                        {/* Top Header Row of Card */}
+                        <div className="flex items-start justify-between gap-1 pointer-events-none">
+                          <div className="flex items-center gap-1 min-w-0">
+                            {isBatchMode && (
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelectActivity(act.id);
+                                }}
+                                className="pointer-events-auto mr-1"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                                )}
+                              </div>
+                            )}
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: category.color }}
+                            />
+                            <p className="font-bold truncate leading-tight text-[11px]">{act.title || 'Untitled'}</p>
+                          </div>
+                        </div>
+
+                        {/* Middle Content */}
+                        <div className="my-0.5 pointer-events-none">
+                          <p className="text-[10px] font-medium opacity-80 flex items-center gap-1">
+                            {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
+                          </p>
+                          {heightPx > 45 && act.notes && (
+                            <p className="text-[10px] opacity-70 truncate mt-0.5 italic">{act.notes}</p>
                           )}
                         </div>
 
-                        {heightPx > 48 && (
-                          <div className="mt-1 text-[10px] opacity-90 truncate leading-tight">
-                            {block.location && (
-                              <span className="inline-flex items-center gap-0.5 mr-1 font-semibold">
-                                <Icons.MapPin /> {block.location}
-                              </span>
-                            )}
-                            {block.description}
+                        {/* Drag Handle Indicator */}
+                        {!isBatchMode && (
+                          <div
+                            onMouseDown={(e) => handleMouseDown(e, act, 'move', 'main')}
+                            className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 flex items-center justify-center"
+                          >
+                            <span className="text-[9px] bg-slate-900/60 text-white px-1.5 py-0.5 rounded shadow backdrop-blur-sm pointer-events-none">
+                              Drag 5m
+                            </span>
                           </div>
                         )}
+
+                        {/* Bottom Resize Handle */}
+                        {!isBatchMode && (
+                          <div
+                            onMouseDown={(e) => handleMouseDown(e, act, 'resize-bottom', 'main')}
+                            className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize hover:bg-slate-400/40 opacity-0 group-hover/card:opacity-100 z-10 rounded-b"
+                          />
+                        )}
                       </div>
-
-                      {heightPx > 36 && (
-                        <div className="flex items-center justify-between text-[9px] opacity-85 pt-0.5 border-t border-white/20">
-                          <span className="uppercase tracking-wider font-extrabold truncate">{block.category || 'Work'}</span>
-                          <span className="font-bold">{formatDuration(displayDuration)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Hover Action Buttons */}
-                    <div className="absolute top-1 right-1 hidden group-hover:flex items-center gap-1 z-30 bg-black/50 backdrop-blur-md p-1 rounded-lg">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingBlock({ ...block });
-                          setIsModalOpen(true);
-                        }}
-                        className="p-1 hover:bg-white/20 rounded text-white"
-                        title="Edit Activity"
-                      >
-                        <Icons.Edit />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDuplicateBlock(block);
-                        }}
-                        className="p-1 hover:bg-white/20 rounded text-white"
-                        title="Duplicate Activity"
-                      >
-                        <Icons.Copy />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteBlock(block.id);
-                        }}
-                        className="p-1 hover:bg-red-500/80 rounded text-white"
-                        title="Delete Activity"
-                      >
-                        <Icons.Trash />
-                      </button>
-                    </div>
-
-                    {/* Bottom Resize Handle */}
-                    <div
-                      onMouseDown={(e) => handleStartDrag(e, block, 'resize-bottom')}
-                      className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-white/40 z-20 rounded-b-xl"
-                      title="Drag to adjust duration in 5-min steps"
-                    />
-                  </div>
-                );
-              })}
-
-              {/* Live Preview Box when dragging to create a new activity */}
-              {interaction && interaction.type === 'create' && (
-                <div
-                  style={{
-                    left: `${(daysList.findIndex((d) => d.dateStr === interaction.tempDate) * 100) / daysList.length}%`,
-                    width: `${100 / daysList.length}%`,
-                    top: `${(interaction.tempStartMin - visibleStartMin) * slotHeightRatio}px`,
-                    height: `${interaction.tempDuration * slotHeightRatio}px`
-                  }}
-                  className="absolute bg-indigo-500/30 border-2 border-dashed border-indigo-600 rounded-xl pointer-events-none z-30 flex items-center justify-center text-xs font-bold text-indigo-900 dark:text-indigo-200"
-                >
-                  {minutesToFormattedTime(interaction.tempStartMin)} ({formatDuration(interaction.tempDuration)})
+                    );
+                  })}
                 </div>
-              )}
-
-            </div>
+              );
+            })}
           </div>
         </div>
       </main>
 
-      {isModalOpen && editingBlock && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border p-6 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+      {}
+      {/* EXPANDED SINGLE DAY VIEW POP-UP MODAL */}
+      {selectedDayView && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-hidden">
+          <div className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden animate-fadeIn ${
+            darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+          }`}>
             
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <Icons.Clock />
-                <span>{blocks.some((b) => b.id === editingBlock.id) ? 'Edit Activity Details' : 'Create New Activity'}</span>
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg">
-                ✕
-              </button>
-            </div>
+            {/* Modal Header Bar */}
+            <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 ${
+              darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
+              {/* Day Navigation */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const currentIndex = SCHEDULE_DATES.indexOf(selectedDayView);
+                    if (currentIndex > 0) {
+                      setSelectedDayView(SCHEDULE_DATES[currentIndex - 1]);
+                    }
+                  }}
+                  disabled={SCHEDULE_DATES.indexOf(selectedDayView) === 0}
+                  className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
+                  title="Previous Day"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
 
-            {/* Modal Form */}
-            <div className="mt-4 space-y-4 text-xs sm:text-sm">
-              <div>
-                <label className="block font-bold mb-1">Activity Title *</label>
-                <input
-                  type="text"
-                  value={editingBlock.title}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, title: e.target.value })}
-                  placeholder="e.g., Morning Workout, Client Call..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-indigo-500" />
+                    <h2 className="font-bold text-lg md:text-xl tracking-tight">
+                      {formatDateLabel(selectedDayView).fullDayName}, {formatDateLabel(selectedDayView).fullFormattedDate}
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    High Resolution Single Day View • 5-min precision grid
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const currentIndex = SCHEDULE_DATES.indexOf(selectedDayView);
+                    if (currentIndex < SCHEDULE_DATES.length - 1) {
+                      setSelectedDayView(SCHEDULE_DATES[currentIndex + 1]);
+                    }
+                  }}
+                  disabled={SCHEDULE_DATES.indexOf(selectedDayView) === SCHEDULE_DATES.length - 1}
+                  className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
+                  title="Next Day"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold mb-1">Date</label>
-                  <select
-                    value={editingBlock.date}
-                    onChange={(e) => setEditingBlock({ ...editingBlock, date: e.target.value })}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              {/* Action Tools & Close Button */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() =>
+                    setEditingActivity({
+                      id: 'act-' + Date.now(),
+                      title: '',
+                      date: selectedDayView,
+                      startTime: '09:00',
+                      endTime: '10:00',
+                      categoryId: categories[0]?.id || '',
+                      notes: '',
+                      isNew: true,
+                    })
+                  }
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> Add Activity
+                </button>
+
+                <button
+                  onClick={() => setSelectedDayView(null)}
+                  className="px-3.5 py-1.5 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs rounded-xl hover:opacity-90 transition-all flex items-center gap-1.5 shadow"
+                  title="Return to Full Schedule View"
+                >
+                  <Minimize2 className="w-4 h-4" /> Close Day View
+                </button>
+              </div>
+            </div>
+
+            {}
+            {/* Expanded Day View Timetable Area */}
+            <div className="flex-1 overflow-y-auto relative p-4">
+              <div className="max-w-3xl mx-auto rounded-xl border dark:border-slate-800 border-slate-200 overflow-hidden relative" style={{ height: `${DAY_VIEW_GRID_HEIGHT}px` }}>
+                <div className="grid grid-cols-[100px_1fr] h-full relative">
+                  
+                  {/* Left Expanded Time Column */}
+                  <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${
+                    darkMode ? 'bg-slate-900/60' : 'bg-slate-50'
+                  }`}>
+                    {Array.from({ length: 12 }).map((_, idx) => {
+                      const hourMins = GRID_START_MINUTES + idx * 60;
+                      return (
+                        <div
+                          key={idx}
+                          className="border-b dark:border-slate-800/80 border-slate-200 pr-3 text-right font-semibold text-xs text-slate-500 dark:text-slate-400 flex items-start justify-end pt-2"
+                          style={{ height: `${DAY_VIEW_HOUR_HEIGHT}px` }}
+                        >
+                          {formatDisplayTime(minutesToTime(hourMins))}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Main Grid Interactive Single Column */}
+                  <div
+                    className="relative transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 cursor-pointer"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickY = e.clientY - rect.top;
+                      const clickedMinute = GRID_START_MINUTES + (clickY / DAY_VIEW_GRID_HEIGHT) * TOTAL_MINUTES;
+                      handleGridCellClick(selectedDayView, clickedMinute);
+                    }}
                   >
-                    {daysList.map((d) => (
-                      <option key={d.dateStr} value={d.dateStr}>
-                        {d.dayName} {d.monthDay}
-                      </option>
+                    {/* Hourly Guidelines */}
+                    {Array.from({ length: 12 }).map((_, idx) => (
+                      <div
+                        key={idx}
+                        className="border-b dark:border-slate-800/60 border-slate-200 pointer-events-none"
+                        style={{ height: `${DAY_VIEW_HOUR_HEIGHT}px` }}
+                      />
                     ))}
-                  </select>
+
+                    {/* 15-Minute Sub-Guidelines */}
+                    {Array.from({ length: 48 }).map((_, idx) => (
+                      <div
+                        key={`sub15-${idx}`}
+                        className="border-b border-dashed dark:border-slate-800/30 border-slate-100 pointer-events-none absolute w-full"
+                        style={{ top: `${(idx * DAY_VIEW_HOUR_HEIGHT) / 4}px` }}
+                      />
+                    ))}
+
+                    {/* Day Activities in Expanded View */}
+                    {calculateOverlaps(filteredActivities.filter((a) => a.date === selectedDayView)).map((act) => {
+                      const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
+                      const startMins = timeToMinutes(act.startTime);
+                      const endMins = timeToMinutes(act.endTime);
+                      
+                      const topPx = ((startMins - GRID_START_MINUTES) / TOTAL_MINUTES) * DAY_VIEW_GRID_HEIGHT;
+                      const heightPx = ((endMins - startMins) / TOTAL_MINUTES) * DAY_VIEW_GRID_HEIGHT;
+
+                      const widthPercent = 100 / (act.totalColumns || 1);
+                      const leftPercent = (act.columnIndex || 0) * widthPercent;
+
+                      const isSelected = selectedActivityIds.includes(act.id);
+
+                      return (
+                        <div
+                          key={act.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isBatchMode) {
+                              toggleSelectActivity(act.id);
+                            } else {
+                              setEditingActivity({ ...act });
+                            }
+                          }}
+                          style={{
+                            top: `${topPx}px`,
+                            height: `${Math.max(36, heightPx)}px`,
+                            left: `${leftPercent}%`,
+                            width: `${widthPercent}%`,
+                            backgroundColor: `${category.color}25`,
+                            borderColor: category.color,
+                          }}
+                          className={`absolute rounded-xl border-l-8 border-y border-r p-3 text-xs shadow-md cursor-pointer transition-all overflow-hidden flex flex-col justify-between group/daycard ${
+                            isSelected ? 'ring-4 ring-rose-500 bg-rose-500/20' : 'hover:shadow-lg hover:z-10'
+                          } ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}
+                        >
+                          {/* Top Resize Handle */}
+                          {!isBatchMode && (
+                            <div
+                              onMouseDown={(e) => handleMouseDown(e, act, 'resize-top', 'dayView')}
+                              className="absolute top-0 left-0 right-0 h-3 cursor-n-resize hover:bg-slate-400/40 opacity-0 group-hover/daycard:opacity-100 z-10 rounded-t"
+                            />
+                          )}
+
+                          {/* Content Row */}
+                          <div className="flex items-start justify-between gap-2 pointer-events-none">
+                            <div className="flex items-center gap-2">
+                              {isBatchMode && (
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSelectActivity(act.id);
+                                  }}
+                                  className="pointer-events-auto"
+                                >
+                                  {isSelected ? (
+                                    <CheckSquare className="w-5 h-5 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
+                                  ) : (
+                                    <Square className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+                                  )}
+                                </div>
+                              )}
+                              <span
+                                className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm"
+                                style={{ backgroundColor: category.color }}
+                              >
+                                {category.name}
+                              </span>
+                              <h4 className="font-bold text-sm tracking-tight">{act.title || 'Untitled'}</h4>
+                            </div>
+
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300">
+                              {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
+                            </span>
+                          </div>
+
+                          {act.notes && heightPx > 50 && (
+                            <p className="text-xs opacity-90 my-1 pointer-events-none line-clamp-2">
+                              {act.notes}
+                            </p>
+                          )}
+
+                          {/* Drag Overlay Bar */}
+                          {!isBatchMode && (
+                            <div
+                              onMouseDown={(e) => handleMouseDown(e, act, 'move', 'dayView')}
+                              className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/daycard:opacity-100 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px] transition-opacity"
+                            >
+                              <span className="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full shadow pointer-events-none">
+                                Drag to move (5m snap)
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Bottom Resize Handle */}
+                          {!isBatchMode && (
+                            <div
+                              onMouseDown={(e) => handleMouseDown(e, act, 'resize-bottom', 'dayView')}
+                              className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-slate-400/40 opacity-0 group-hover/daycard:opacity-100 z-10 rounded-b"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                <div>
-                  <label className="block font-bold mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    step="300"
-                    value={minutesToInputTime(editingBlock.startMin)}
-                    onChange={(e) => {
-                      const newStart = inputTimeToMinutes(e.target.value);
-                      setEditingBlock({ ...editingBlock, startMin: newStart });
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold mb-1">Duration (Mins)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    step="5"
-                    value={editingBlock.duration}
-                    onChange={(e) => {
-                      const dur = Math.max(5, Number(e.target.value));
-                      setEditingBlock({ ...editingBlock, duration: dur });
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1">Location / Link</label>
-                <input
-                  type="text"
-                  value={editingBlock.location || ''}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, location: e.target.value })}
-                  placeholder="e.g., Zoom Link, Conf Room 3, Gym..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1">Category & Preset Color</label>
-                <div className="grid grid-cols-4 gap-2 mb-2">
-                  {PRESET_COLORS.map((preset) => (
-                    <button
-                      key={preset.name}
-                      type="button"
-                      onClick={() =>
-                        setEditingBlock({
-                          ...editingBlock,
-                          category: preset.category,
-                          color: preset.bg
-                        })
-                      }
-                      style={{ backgroundColor: preset.bg }}
-                      className={`p-2 rounded-xl text-white text-[11px] font-extrabold truncate transition-transform ${
-                        editingBlock.color === preset.bg ? 'ring-2 ring-offset-2 ring-indigo-500 scale-105' : 'opacity-80 hover:opacity-100'
-                      }`}
-                    >
-                      {preset.category}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 font-medium">Custom Color:</span>
-                  <input
-                    type="color"
-                    value={editingBlock.color}
-                    onChange={(e) => setEditingBlock({ ...editingBlock, color: e.target.value })}
-                    className="w-8 h-8 rounded border-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1">Description / Notes</label>
-                <textarea
-                  rows="3"
-                  value={editingBlock.description}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, description: e.target.value })}
-                  placeholder="Add details, meeting agenda or reminders..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
               </div>
             </div>
-
-            {/* Modal Actions */}
-            <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-              {blocks.some((b) => b.id === editingBlock.id) ? (
-                <button
-                  onClick={() => handleDeleteBlock(editingBlock.id)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 font-bold"
-                >
-                  <Icons.Trash />
-                  <span>Delete</span>
-                </button>
-              ) : (
-                <div />
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleSaveModal(editingBlock)}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-500/20"
-                >
-                  Save Activity
-                </button>
-              </div>
-            </div>
-
           </div>
         </div>
       )}
 
-      {undoToast && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-700">
-          <span className="text-xs font-medium">{undoToast.message}</span>
+      {}
+      {/* BATCH FLOATING BAR */}
+      {isBatchMode && selectedActivityIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4 animate-bounce">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+            <span className="font-bold text-sm">
+              {selectedActivityIds.length} {selectedActivityIds.length === 1 ? 'activity' : 'activities'} selected
+            </span>
+          </div>
+          <div className="h-4 w-px bg-slate-700 dark:bg-slate-300" />
           <button
-            onClick={handleUndoDelete}
-            className="flex items-center gap-1 px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
           >
-            <Icons.Undo />
-            <span>Undo</span>
+            <Trash2 className="w-4 h-4" /> Delete Selected
           </button>
+        </div>
+      )}
+
+      {/* CONFIRM BATCH DELETE DIALOG */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center gap-3 text-rose-500 mb-4">
+              <div className="p-3 rounded-full bg-rose-100 dark:bg-rose-950/80">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Confirm Batch Deletion</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
+              Are you sure you want to permanently delete{' '}
+              <span className="font-bold text-rose-600 dark:text-rose-400">{selectedActivityIds.length}</span> selected activity items?
+            </p>
+
+            {/* Selected Items Summary Preview */}
+            <div className={`p-3 rounded-xl max-h-36 overflow-y-auto mb-6 text-xs border ${darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="font-bold mb-2 text-slate-400 uppercase text-[10px] tracking-wider">Items to be removed:</p>
+              <ul className="space-y-1">
+                {activities
+                  .filter((a) => selectedActivityIds.includes(a.id))
+                  .map((a) => (
+                    <li key={a.id} className="truncate flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                      <span className="font-medium">{a.title}</span>
+                      <span className="opacity-60 text-[10px]">({a.date})</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className={`px-4 py-2 text-xs font-semibold rounded-xl border transition-all ${
+                  darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBatchDeleteConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-rose-500/20 transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {}
+      {/* EDIT / CREATE ACTIVITY MODAL */}
+      {editingActivity && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            
+            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-indigo-500" />
+                {editingActivity.isNew ? 'Create Activity' : 'Edit Activity'}
+              </h3>
+              <button
+                onClick={() => setEditingActivity(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setActivities((prev) => {
+                  const exists = prev.some((a) => a.id === editingActivity.id);
+                  if (exists) {
+                    return prev.map((a) => (a.id === editingActivity.id ? editingActivity : a));
+                  }
+                  return [...prev, { ...editingActivity, isNew: undefined }];
+                });
+                setEditingActivity(null);
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Activity Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editingActivity.title}
+                  onChange={(e) => setEditingActivity({ ...editingActivity, title: e.target.value })}
+                  placeholder="e.g. Deep Work Session"
+                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                    darkMode
+                      ? 'bg-slate-800 border-slate-700 text-slate-100 focus:border-indigo-500'
+                      : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Date</label>
+                  <select
+                    value={editingActivity.date}
+                    onChange={(e) => setEditingActivity({ ...editingActivity, date: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {SCHEDULE_DATES.map((d) => {
+                      const { dayName, formattedDate } = formatDateLabel(d);
+                      return (
+                        <option key={d} value={d}>
+                          {dayName}, {formattedDate}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Category</label>
+                  <select
+                    value={editingActivity.categoryId}
+                    onChange={(e) => setEditingActivity({ ...editingActivity, categoryId: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Time</label>
+                  <input
+                    type="time"
+                    min="06:00"
+                    max="18:00"
+                    step="300"
+                    required
+                    value={editingActivity.startTime}
+                    onChange={(e) => setEditingActivity({ ...editingActivity, startTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Time</label>
+                  <input
+                    type="time"
+                    min="06:00"
+                    max="18:00"
+                    step="300"
+                    required
+                    value={editingActivity.endTime}
+                    onChange={(e) => setEditingActivity({ ...editingActivity, endTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Details</label>
+                <textarea
+                  rows={3}
+                  value={editingActivity.notes || ''}
+                  onChange={(e) => setEditingActivity({ ...editingActivity, notes: e.target.value })}
+                  placeholder="Add details, links or agenda notes..."
+                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t dark:border-slate-800 border-slate-200">
+                {!editingActivity.isNew ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivities((prev) => prev.filter((a) => a.id !== editingActivity.id));
+                      setEditingActivity(null);
+                    }}
+                    className="text-rose-500 hover:text-rose-700 font-semibold flex items-center gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </button>
+                ) : <span />}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingActivity(null)}
+                    className={`px-4 py-2 font-semibold rounded-xl border ${
+                      darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md shadow-indigo-500/20"
+                  >
+                    Save Activity
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {}
+      {/* CATEGORY MANAGER MODAL */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`max-w-lg w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Tag className="w-4 h-4 text-indigo-500" />
+                Category & Color Manager
+              </h3>
+              <button
+                onClick={() => setShowCategoryManager(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {categories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+                    darkMode ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <input
+                      type="color"
+                      value={cat.color}
+                      onChange={(e) => {
+                        const newColor = e.target.value;
+                        setCategories((prev) =>
+                          prev.map((c) => (c.id === cat.id ? { ...c, color: newColor } : c))
+                        );
+                      }}
+                      className="w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={cat.name}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        setCategories((prev) =>
+                          prev.map((c) => (c.id === cat.id ? { ...c, name: newName } : c))
+                        );
+                      }}
+                      className={`font-semibold text-xs px-2 py-1 rounded-lg border outline-none w-full ${
+                        darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
+                      }`}
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (categories.length <= 1) return;
+                      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+                    }}
+                    disabled={categories.length <= 1}
+                    className="text-slate-400 hover:text-rose-500 disabled:opacity-30 p-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex items-center justify-between mt-4">
+              <button
+                onClick={() => {
+                  const newCat = {
+                    id: 'cat-' + Date.now(),
+                    name: 'New Category',
+                    color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
+                  };
+                  setCategories((prev) => [...prev, newCat]);
+                }}
+                className="px-3.5 py-1.5 bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold rounded-xl hover:bg-indigo-100 flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Add Category
+              </button>
+
+              <button
+                onClick={() => setShowCategoryManager(false)}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {}
+      {/* ANALYTICS DASHBOARD MODAL */}
+      {showAnalytics && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`max-w-xl w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-500" />
+                Time Utilization Analytics
+              </h3>
+              <button
+                onClick={() => setShowAnalytics(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Total scheduled hours across all 8 days (Jan 20 – Jan 27, 2026).
+            </p>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+              {categoryAnalytics.map((cat) => (
+                <div key={cat.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-medium">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                      <span className="font-bold">{cat.name}</span>
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {cat.hours} hrs ({cat.percentage}%) • {cat.count} items
+                    </span>
+                  </div>
+
+                  <div className={`h-3 rounded-full overflow-hidden w-full ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${cat.percentage}%`,
+                        backgroundColor: cat.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex justify-end mt-6">
+              <button
+                onClick={() => setShowAnalytics(false)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
