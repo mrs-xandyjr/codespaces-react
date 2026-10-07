@@ -29,22 +29,19 @@ import {
   Sparkles,
   Layers,
   CalendarDays,
-  Pencil,
-  RotateCcw,
-  Sliders
+  Sliders,
+  Move
 } from 'lucide-react';
 
-const GRID_START_MINUTES = 360; // 6:00 AM
-const GRID_END_MINUTES = 1080;   // 6:00 PM
-const TOTAL_MINUTES = GRID_END_MINUTES - GRID_START_MINUTES; // 720 minutes (12 hours)
+// Time window defaults (6:00 AM to 6:00 PM)
+const DEFAULT_START_HOUR = 6;
+const DEFAULT_END_HOUR = 18;
 
-// Pixel heights per hour
-const MAIN_HOUR_HEIGHT = 80; 
-const MAIN_GRID_HEIGHT = (TOTAL_MINUTES / 60) * MAIN_HOUR_HEIGHT; // 960px
+// Pixel scales for main grid and expanded single-day popup
+const MAIN_HOUR_HEIGHT = 80;
+const DAY_VIEW_HOUR_HEIGHT = 120;
 
-const DAY_VIEW_HOUR_HEIGHT = 120; 
-const DAY_VIEW_GRID_HEIGHT = (TOTAL_MINUTES / 60) * DAY_VIEW_HOUR_HEIGHT; // 1440px
-
+// Preset Color Swatches for Categories
 const PRESET_COLORS = [
   '#3B82F6', // Blue
   '#10B981', // Emerald
@@ -58,6 +55,7 @@ const PRESET_COLORS = [
   '#F97316', // Orange
 ];
 
+// Initial Categories
 const DEFAULT_CATEGORIES = [
   { id: 'cat-work', name: 'Deep Work', color: '#3B82F6' },
   { id: 'cat-fitness', name: 'Health & Fitness', color: '#10B981' },
@@ -67,6 +65,7 @@ const DEFAULT_CATEGORIES = [
   { id: 'cat-leisure', name: 'Personal & Rest', color: '#14B8A6' },
 ];
 
+// Sample Initial Activities with Multi-Tag categories
 const INITIAL_ACTIVITIES = [
   {
     id: 'act-1',
@@ -74,7 +73,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-20',
     startTime: '08:00',
     endTime: '09:30',
-    categoryId: 'cat-meeting',
+    categoryIds: ['cat-meeting', 'cat-work'],
     notes: 'Review goals for Q1 and assign initial development tickets.',
   },
   {
@@ -83,7 +82,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-20',
     startTime: '10:00',
     endTime: '12:30',
-    categoryId: 'cat-work',
+    categoryIds: ['cat-work'],
     notes: 'Implement API routing layer and global state store.',
   },
   {
@@ -92,7 +91,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-20',
     startTime: '13:00',
     endTime: '14:15',
-    categoryId: 'cat-fitness',
+    categoryIds: ['cat-fitness', 'cat-leisure'],
     notes: 'Leg day routine and 20 min high intensity cycling.',
   },
   {
@@ -101,7 +100,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-21',
     startTime: '07:00',
     endTime: '08:30',
-    categoryId: 'cat-learn',
+    categoryIds: ['cat-learn', 'cat-work'],
     notes: 'Explore Server Actions, useActionState, and Optimistic UI features.',
   },
   {
@@ -110,7 +109,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-21',
     startTime: '09:00',
     endTime: '10:30',
-    categoryId: 'cat-meeting',
+    categoryIds: ['cat-meeting'],
     notes: 'Present prototype wireframes to stakeholders for sign-off.',
   },
   {
@@ -119,7 +118,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-21',
     startTime: '11:00',
     endTime: '12:00',
-    categoryId: 'cat-admin',
+    categoryIds: ['cat-admin'],
     notes: 'Clear pending emails and update internal team wiki.',
   },
   {
@@ -128,7 +127,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-22',
     startTime: '08:30',
     endTime: '10:00',
-    categoryId: 'cat-work',
+    categoryIds: ['cat-work', 'cat-learn'],
     notes: 'Audit Tailwind color tokens and dark mode component specs.',
   },
   {
@@ -137,7 +136,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-22',
     startTime: '10:00',
     endTime: '12:00',
-    categoryId: 'cat-work',
+    categoryIds: ['cat-work'],
     notes: 'Optimize indexes and run benchmark scripts on staging environment.',
   },
   {
@@ -146,7 +145,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-23',
     startTime: '06:30',
     endTime: '07:30',
-    categoryId: 'cat-fitness',
+    categoryIds: ['cat-fitness'],
     notes: 'Morning stretch and breathing exercise session.',
   },
   {
@@ -155,7 +154,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-23',
     startTime: '13:30',
     endTime: '15:45',
-    categoryId: 'cat-work',
+    categoryIds: ['cat-work', 'cat-admin'],
     notes: 'Review pull requests for batch selection and modal components.',
   },
   {
@@ -164,7 +163,7 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-24',
     startTime: '09:00',
     endTime: '11:30',
-    categoryId: 'cat-leisure',
+    categoryIds: ['cat-leisure', 'cat-learn'],
     notes: 'Read technical whitepapers and enjoy morning coffee.',
   },
   {
@@ -173,11 +172,61 @@ const INITIAL_ACTIVITIES = [
     date: '2026-01-26',
     startTime: '16:00',
     endTime: '17:30',
-    categoryId: 'cat-meeting',
+    categoryIds: ['cat-meeting', 'cat-admin'],
     notes: 'Discuss sprint accomplishments and team retro points.',
   }
 ];
 
+// Hex color to RGBA string converter
+const hexToRgba = (hex, alpha = 0.3) => {
+  if (!hex) return `rgba(100, 116, 139, ${alpha})`;
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map((x) => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return `rgba(100, 116, 139, ${alpha})`;
+  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+};
+
+// Generates dynamic background style (solid or multi-tag diagonal striped gradient)
+const getMultiTagBackground = (categoryIds = [], categoryMap, isDark) => {
+  const validCategories = (categoryIds || [])
+    .map((id) => categoryMap[id])
+    .filter(Boolean);
+
+  if (validCategories.length === 0) {
+    return {
+      background: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.8)',
+      borderColor: '#94a3b8',
+    };
+  }
+
+  if (validCategories.length === 1) {
+    const cat = validCategories[0];
+    const bgOpacity = isDark ? 0.35 : 0.22;
+    return {
+      backgroundColor: hexToRgba(cat.color, bgOpacity),
+      borderColor: cat.color,
+    };
+  }
+
+  // Multiple Tags -> Create repeating diagonal striped CSS linear gradient
+  const stripeWidth = 16;
+  const colorStops = [];
+  validCategories.forEach((cat, idx) => {
+    const startPx = idx * stripeWidth;
+    const endPx = (idx + 1) * stripeWidth;
+    const rgbaColor = hexToRgba(cat.color, isDark ? 0.45 : 0.28);
+    colorStops.push(`${rgbaColor} ${startPx}px`);
+    colorStops.push(`${rgbaColor} ${endPx}px`);
+  });
+
+  return {
+    background: `repeating-linear-gradient(-45deg, ${colorStops.join(', ')})`,
+    borderColor: validCategories[0].color,
+  };
+};
+
+// Time Conversion Helpers
 const timeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
   const [hrs, mins] = timeStr.split(':').map(Number);
@@ -201,49 +250,52 @@ const formatDisplayTime = (timeStr) => {
   return `${displayHour}:${displayMin} ${period}`;
 };
 
+// Date Range Generator
+const getDatesInRange = (startDateStr, endDateStr) => {
+  const dates = [];
+  let current = new Date(startDateStr + 'T00:00:00');
+  const end = new Date(endDateStr + 'T00:00:00');
+
+  if (isNaN(current.getTime()) || isNaN(end.getTime()) || current > end) {
+    return [startDateStr];
+  }
+
+  while (current <= end) {
+    const yyyy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+};
+
 const formatDateLabel = (dateStr) => {
-  if (!dateStr) return { dayName: '', fullDayName: '', formattedDate: '', fullFormattedDate: '' };
+  if (!dateStr) return { dayName: '', formattedDate: '', fullFormattedDate: '' };
   const [year, month, day] = dateStr.split('-').map(Number);
   const dateObj = new Date(year, month - 1, day);
   const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
   const fullDayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
   const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
   const fullMonthName = dateObj.toLocaleDateString('en-US', { month: 'long' });
-  return { dayName, fullDayName, formattedDate: `${monthName} ${day}`, fullFormattedDate: `${fullMonthName} ${day}, ${year}` };
-};
-
-// Generates an array of date strings ('YYYY-MM-DD') between startDate and endDate
-const generateDateRange = (startStr, endStr) => {
-  if (!startStr || !endStr) return [];
-  const dates = [];
-  const start = new Date(startStr + 'T00:00:00');
-  const end = new Date(endStr + 'T00:00:00');
-  
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-    return [startStr];
-  }
-
-  const current = new Date(start);
-  let limitCount = 0;
-  while (current <= end && limitCount < 31) { // Cap at 31 days max to preserve UI responsiveness
-    const yyyy = current.getFullYear();
-    const mm = String(current.getMonth() + 1).padStart(2, '0');
-    const dd = String(current.getDate()).padStart(2, '0');
-    dates.push(`${yyyy}-${mm}-${dd}`);
-    current.setDate(current.getDate() + 1);
-    limitCount++;
-  }
-  return dates;
+  return {
+    dayName,
+    fullDayName,
+    formattedDate: `${monthName} ${day}`,
+    fullFormattedDate: `${fullMonthName} ${day}, ${year}`,
+  };
 };
 
 const calculateOverlaps = (activities) => {
   if (!activities || activities.length === 0) return [];
 
-  const sorted = [...activities].map((act) => ({
-    ...act,
-    startMins: timeToMinutes(act.startTime),
-    endMins: timeToMinutes(act.endTime),
-  })).sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
+  const sorted = [...activities]
+    .map((act) => ({
+      ...act,
+      startMins: timeToMinutes(act.startTime),
+      endMins: timeToMinutes(act.endTime),
+    }))
+    .sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
 
   const clusters = [];
   let currentCluster = [];
@@ -296,129 +348,108 @@ const calculateOverlaps = (activities) => {
 };
 
 export default function App() {
-  // Title & Date Range Settings
-  const [plannerTitle, setPlannerTitle] = useState(() => {
-    return localStorage.getItem('planner_title') || 'Master Schedule Planner';
-  });
-  const [startDate, setStartDate] = useState(() => {
-    return localStorage.getItem('planner_start_date') || '2026-01-20';
-  });
-  const [endDate, setEndDate] = useState(() => {
-    return localStorage.getItem('planner_end_date') || '2026-01-27';
-  });
-
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-
-  // Dynamic Date Range Columns
-  const scheduleDates = useMemo(() => {
-    return generateDateRange(startDate, endDate);
-  }, [startDate, endDate]);
-
-  // Data Store
+  // Persistence state
   const [activities, setActivities] = useState(() => {
-    const saved = localStorage.getItem('planner_activities');
+    const saved = localStorage.getItem('planner_activities_v2');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        // Normalize backward compatibility for single categoryId
+        return parsed.map((act) => ({
+          ...act,
+          categoryIds: act.categoryIds || (act.categoryId ? [act.categoryId] : []),
+        }));
+      } catch (e) {
+        console.error(e);
+      }
     }
     return INITIAL_ACTIVITIES;
   });
 
   const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem('planner_categories');
+    const saved = localStorage.getItem('planner_categories_v2');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
     }
     return DEFAULT_CATEGORIES;
   });
 
-  // UI States
+  // Schedule Title & Configurable Date Range
+  const [scheduleTitle, setScheduleTitle] = useState(() => {
+    return localStorage.getItem('planner_title') || 'Jan 20 - Jan 27, 2026 Schedule';
+  });
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+
+  const [startDate, setStartDate] = useState(() => localStorage.getItem('planner_start_date') || '2026-01-20');
+  const [endDate, setEndDate] = useState(() => localStorage.getItem('planner_end_date') || '2026-01-27');
+  const [startHour, setStartHour] = useState(DEFAULT_START_HOUR);
+  const [endHour, setEndHour] = useState(DEFAULT_END_HOUR);
+
+  // App UI Controls
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilters, setActiveCategoryFilters] = useState([]);
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('planner_dark') === 'true';
-  });
+  const [darkMode, setDarkMode] = useState(false);
 
-  // Expanded Single Day View Pop-up state
+  // Single Day Pop-up View state
   const [selectedDayView, setSelectedDayView] = useState(null);
 
-  // Batch Selection & Deletion State
+  // Batch Select & Delete Mode
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Modals & Drawers
+  // Modals
   const [editingActivity, setEditingActivity] = useState(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showDateSettings, setShowDateSettings] = useState(false);
 
-  // Drag & Resize State
+  // Drag & Drop / Resize state
   const [dragState, setDragState] = useState(null);
-  const gridContainerRef = useRef(null);
+  const mainGridRef = useRef(null);
+
+  // Derived Grid Metrics
+  const gridStartMins = startHour * 60;
+  const gridEndMins = endHour * 60;
+  const totalMinutes = Math.max(60, gridEndMins - gridStartMins);
+  const totalHours = Math.ceil(totalMinutes / 60);
+
+  const mainGridHeight = totalHours * MAIN_HOUR_HEIGHT;
+  const dayViewGridHeight = totalHours * DAY_VIEW_HOUR_HEIGHT;
+
+  // Schedule Dates array
+  const scheduleDates = useMemo(() => {
+    return getDatesInRange(startDate, endDate);
+  }, [startDate, endDate]);
 
   useEffect(() => {
-    localStorage.setItem('planner_title', plannerTitle);
-  }, [plannerTitle]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_start_date', startDate);
-  }, [startDate]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_end_date', endDate);
-  }, [endDate]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_activities', JSON.stringify(activities));
+    localStorage.setItem('planner_activities_v2', JSON.stringify(activities));
   }, [activities]);
 
   useEffect(() => {
-    localStorage.setItem('planner_categories', JSON.stringify(categories));
+    localStorage.setItem('planner_categories_v2', JSON.stringify(categories));
   }, [categories]);
 
   useEffect(() => {
-    localStorage.setItem('planner_dark', darkMode);
+    localStorage.setItem('planner_title', scheduleTitle);
+  }, [scheduleTitle]);
+
+  useEffect(() => {
+    localStorage.setItem('planner_start_date', startDate);
+    localStorage.setItem('planner_end_date', endDate);
+  }, [startDate, endDate]);
+
+  useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
-
-  const toggleSelectActivity = (id) => {
-    setSelectedActivityIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAll = () => {
-    const visibleIds = filteredActivities.map((a) => a.id);
-    setSelectedActivityIds(visibleIds);
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedActivityIds([]);
-  };
-
-  const handleBatchDeleteConfirm = () => {
-    setActivities((prev) => prev.filter((act) => !selectedActivityIds.includes(act.id)));
-    setSelectedActivityIds([]);
-    setShowDeleteConfirm(false);
-    setIsBatchMode(false);
-  };
-
-  const filteredActivities = useMemo(() => {
-    return activities.filter((act) => {
-      const matchesSearch =
-        act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (act.notes && act.notes.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const matchesCategory =
-        activeCategoryFilters.length === 0 || activeCategoryFilters.includes(act.categoryId);
-
-      return matchesSearch && matchesCategory;
-    });
-  }, [activities, searchQuery, activeCategoryFilters]);
 
   const categoryMap = useMemo(() => {
     const map = {};
@@ -428,16 +459,26 @@ export default function App() {
     return map;
   }, [categories]);
 
+  const filteredActivities = useMemo(() => {
+    return activities.filter((act) => {
+      const matchesSearch =
+        act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (act.notes && act.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
+      const matchesCategory =
+        activeCategoryFilters.length === 0 ||
+        actCatIds.some((id) => activeCategoryFilters.includes(id));
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [activities, searchQuery, activeCategoryFilters]);
+
   const handleMouseDown = (e, activity, type, viewType = 'main') => {
     if (isBatchMode) return;
     e.stopPropagation();
 
     const hourHeight = viewType === 'dayView' ? DAY_VIEW_HOUR_HEIGHT : MAIN_HOUR_HEIGHT;
-    
-    let gridBounds = null;
-    if (viewType === 'main' && gridContainerRef.current) {
-      gridBounds = gridContainerRef.current.getBoundingClientRect();
-    }
 
     setDragState({
       id: activity.id,
@@ -447,9 +488,9 @@ export default function App() {
       initialStart: timeToMinutes(activity.startTime),
       initialEnd: timeToMinutes(activity.endTime),
       initialDate: activity.date,
-      hourHeight,
+      currentDate: activity.date,
       viewType,
-      gridBounds,
+      hourHeight,
     });
   };
 
@@ -458,22 +499,24 @@ export default function App() {
 
     const handleMouseMove = (e) => {
       const deltaY = e.clientY - dragState.startY;
-      const hourH = dragState.hourHeight || MAIN_HOUR_HEIGHT;
-      // 5-minute grid snapping calculations
-      const minutesDelta = Math.round((deltaY / hourH) * 60 / 5) * 5;
+      const hourH = dragState.hourHeight;
+      // Convert pixel delta to 5-minute snapped intervals
+      const minutesDelta = Math.round(((deltaY / hourH) * 60) / 5) * 5;
 
-      // Handle Cross-Day Dragging in Main Grid
-      let newDate = dragState.initialDate;
-      if (dragState.type === 'move' && dragState.viewType === 'main' && dragState.gridBounds && scheduleDates.length > 0) {
-        const timeColWidth = 100; // Left axis width
-        const relativeX = e.clientX - (dragState.gridBounds.left + timeColWidth);
-        const dayColWidth = (dragState.gridBounds.width - timeColWidth) / scheduleDates.length;
-        
-        let colIndex = Math.floor(relativeX / dayColWidth);
-        colIndex = Math.max(0, Math.min(scheduleDates.length - 1, colIndex));
-        
-        if (scheduleDates[colIndex]) {
-          newDate = scheduleDates[colIndex];
+      let targetDate = dragState.currentDate;
+
+      // Handle Horizontal Date Column Switch in Main View
+      if (dragState.type === 'move' && dragState.viewType === 'main' && mainGridRef.current) {
+        const gridRect = mainGridRef.current.getBoundingClientRect();
+        const timeColWidth = 80;
+        const availableWidth = gridRect.width - timeColWidth;
+        const colWidth = availableWidth / scheduleDates.length;
+
+        const relativeX = e.clientX - gridRect.left - timeColWidth;
+        const targetColIdx = Math.max(0, Math.min(scheduleDates.length - 1, Math.floor(relativeX / colWidth)));
+
+        if (scheduleDates[targetColIdx]) {
+          targetDate = scheduleDates[targetColIdx];
         }
       }
 
@@ -487,25 +530,25 @@ export default function App() {
 
           if (dragState.type === 'move') {
             newStart = Math.max(
-              GRID_START_MINUTES,
-              Math.min(GRID_END_MINUTES - duration, dragState.initialStart + minutesDelta)
+              gridStartMins,
+              Math.min(gridEndMins - duration, dragState.initialStart + minutesDelta)
             );
             newEnd = newStart + duration;
           } else if (dragState.type === 'resize-top') {
             newStart = Math.max(
-              GRID_START_MINUTES,
+              gridStartMins,
               Math.min(dragState.initialEnd - 15, dragState.initialStart + minutesDelta)
             );
           } else if (dragState.type === 'resize-bottom') {
             newEnd = Math.min(
-              GRID_END_MINUTES,
+              gridEndMins,
               Math.max(dragState.initialStart + 15, dragState.initialEnd + minutesDelta)
             );
           }
 
           return {
             ...act,
-            date: newDate,
+            date: targetDate,
             startTime: minutesToTime(newStart),
             endTime: minutesToTime(newEnd),
           };
@@ -524,12 +567,12 @@ export default function App() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, scheduleDates]);
+  }, [dragState, scheduleDates, gridStartMins, gridEndMins]);
 
   const handleGridCellClick = (dateStr, clickedMinute) => {
     if (isBatchMode) return;
     const snappedStart = Math.round(clickedMinute / 5) * 5;
-    const snappedEnd = Math.min(GRID_END_MINUTES, snappedStart + 60);
+    const snappedEnd = Math.min(gridEndMins, snappedStart + 60);
 
     setEditingActivity({
       id: 'act-' + Date.now(),
@@ -537,41 +580,64 @@ export default function App() {
       date: dateStr,
       startTime: minutesToTime(snappedStart),
       endTime: minutesToTime(snappedEnd),
-      categoryId: categories[0]?.id || '',
+      categoryIds: [categories[0]?.id || 'cat-work'],
       notes: '',
       isNew: true,
     });
   };
 
+  const toggleSelectActivity = (id) => {
+    setSelectedActivityIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedActivityIds(filteredActivities.map((a) => a.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedActivityIds([]);
+  };
+
+  const handleBatchDeleteConfirm = () => {
+    setActivities((prev) => prev.filter((act) => !selectedActivityIds.includes(act.id)));
+    setSelectedActivityIds([]);
+    setShowDeleteConfirm(false);
+    setIsBatchMode(false);
+  };
+
   const exportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-      title: plannerTitle,
-      startDate,
-      endDate,
-      activities,
-      categories
-    }, null, 2));
+    const dataStr =
+      'data:text/json;charset=utf-8,' +
+      encodeURIComponent(
+        JSON.stringify({ title: scheduleTitle, startDate, endDate, activities, categories }, null, 2)
+      );
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `${plannerTitle.toLowerCase().replace(/\s+/g, '_')}_export.json`);
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute(
+      'download',
+      `schedule_planner_${new Date().toISOString().slice(0, 10)}.json`
+    );
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
   };
 
   const exportCSV = () => {
-    let csv = "ID,Title,Date,Start Time,End Time,Category,Notes\n";
-    activities.forEach(act => {
-      const catName = categoryMap[act.categoryId]?.name || 'Uncategorized';
+    let csv = 'ID,Title,Date,Start Time,End Time,Categories/Tags,Notes\n';
+    activities.forEach((act) => {
+      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
+      const tagNames = actCatIds.map((id) => categoryMap[id]?.name || 'Uncategorized').join('; ');
       const cleanNotes = (act.notes || '').replace(/"/g, '""');
-      csv += `"${act.id}","${act.title}","${act.date}","${act.startTime}","${act.endTime}","${catName}","${cleanNotes}"\n`;
+      csv += `"${act.id}","${act.title}","${act.date}","${act.startTime}","${act.endTime}","${tagNames}","${cleanNotes}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${plannerTitle.toLowerCase().replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `schedule_planner_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -580,22 +646,23 @@ export default function App() {
   const importJSON = (e) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], "UTF-8");
-      fileReader.onload = (e) => {
+      fileReader.readAsText(e.target.files[0], 'UTF-8');
+      fileReader.onload = (evt) => {
         try {
-          const parsed = JSON.parse(e.target.result);
-          if (parsed.title) setPlannerTitle(parsed.title);
-          if (parsed.startDate) setStartDate(parsed.startDate);
-          if (parsed.endDate) setEndDate(parsed.endDate);
+          const parsed = JSON.parse(evt.target.result);
           if (parsed.activities) setActivities(parsed.activities);
           if (parsed.categories) setCategories(parsed.categories);
+          if (parsed.title) setScheduleTitle(parsed.title);
+          if (parsed.startDate) setStartDate(parsed.startDate);
+          if (parsed.endDate) setEndDate(parsed.endDate);
         } catch (err) {
-          console.error("Invalid JSON format", err);
+          console.error('Invalid JSON file format', err);
         }
       };
     }
   };
 
+  // Analytics computation (split multi-tag time proportionally)
   const categoryAnalytics = useMemo(() => {
     const totals = {};
     let grandTotalMins = 0;
@@ -610,9 +677,15 @@ export default function App() {
       const duration = Math.max(0, end - start);
       grandTotalMins += duration;
 
-      if (totals[act.categoryId]) {
-        totals[act.categoryId].totalMinutes += duration;
-        totals[act.categoryId].count += 1;
+      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
+      if (actCatIds.length > 0) {
+        const splitDuration = duration / actCatIds.length;
+        actCatIds.forEach((catId) => {
+          if (totals[catId]) {
+            totals[catId].totalMinutes += splitDuration;
+            totals[catId].count += 1;
+          }
+        });
       }
     });
 
@@ -624,36 +697,39 @@ export default function App() {
   }, [activities, categories]);
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
-      
-      {/* HEADER BAR */}
-      <header className={`border-b sticky top-0 z-30 backdrop-blur-md ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+    <div
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
+        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'
+      }`}
+    >
+      <header
+        className={`border-b sticky top-0 z-30 backdrop-blur-md ${
+          darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'
+        }`}
+      >
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          
-          {/* Editable Logo & Schedule Title */}
+          {/* Logo & Editable Title */}
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-md shadow-indigo-500/20">
               <Calendar className="w-6 h-6" />
             </div>
 
-            <div className="flex flex-col">
+            <div>
               {isEditingTitle ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <input
                     type="text"
-                    value={plannerTitle}
-                    onChange={(e) => setPlannerTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') setIsEditingTitle(false);
-                    }}
+                    value={scheduleTitle}
+                    onChange={(e) => setScheduleTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingTitle(false)}
                     autoFocus
-                    className={`font-bold text-lg px-2 py-0.5 rounded border outline-none ${
+                    className={`font-bold text-base md:text-lg px-2 py-0.5 rounded border outline-none ${
                       darkMode ? 'bg-slate-800 border-indigo-500 text-white' : 'bg-slate-100 border-indigo-500 text-slate-900'
                     }`}
                   />
                   <button
                     onClick={() => setIsEditingTitle(false)}
-                    className="p-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                    className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
                   >
                     <Check className="w-4 h-4" />
                   </button>
@@ -661,25 +737,27 @@ export default function App() {
               ) : (
                 <h1
                   onClick={() => setIsEditingTitle(true)}
-                  className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2 cursor-pointer group"
-                  title="Click to edit title inline"
+                  className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 group"
+                  title="Click to edit Schedule Title"
                 >
-                  <span>{plannerTitle}</span>
-                  <Pencil className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {scheduleTitle}
+                  <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
                 </h1>
               )}
 
-              {/* Date Range Badge */}
               <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                  {formatDateLabel(startDate).formattedDate} – {formatDateLabel(endDate).formattedDate}
-                </span>
-                <span>• {scheduleDates.length} Days</span>
+                <span>{scheduleDates.length} Days View</span> •
+                <button
+                  onClick={() => setShowDateSettings(true)}
+                  className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+                >
+                  <Sliders className="w-3 h-3" /> Change Range & Window
+                </button>
               </p>
             </div>
           </div>
 
-          {/* Search Bar */}
+          {/* Search Box */}
           <div className="flex-1 max-w-xs relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -687,7 +765,7 @@ export default function App() {
               placeholder="Search activities or notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-8 py-1.5 text-sm rounded-lg border outline-none transition-all ${
+              className={`w-full pl-9 pr-8 py-1.5 text-xs font-medium rounded-xl border outline-none transition-all ${
                 darkMode
                   ? 'bg-slate-800 border-slate-700 focus:border-indigo-500 text-slate-100 placeholder-slate-500'
                   : 'bg-slate-100 border-slate-200 focus:border-indigo-500 text-slate-800 placeholder-slate-400'
@@ -703,30 +781,15 @@ export default function App() {
             )}
           </div>
 
-          {/* Action Tools & Settings */}
-          <div className="flex items-center gap-2">
-            
-            {/* Range & Settings Modal Toggle */}
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 ${
-                darkMode
-                  ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-              }`}
-              title="Edit Schedule Title and Date Range"
-            >
-              <Sliders className="w-4 h-4 text-indigo-500" />
-              Date Range & Settings
-            </button>
-
-            {/* Multi-Select / Batch Mode Button */}
+          {/* Action Toolbar */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Batch Select Toggle */}
             <button
               onClick={() => {
                 setIsBatchMode(!isBatchMode);
                 setSelectedActivityIds([]);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 ${
                 isBatchMode
                   ? 'bg-rose-500 text-white border-rose-600 shadow-md shadow-rose-500/20'
                   : darkMode
@@ -735,41 +798,41 @@ export default function App() {
               }`}
             >
               <CheckSquare className="w-4 h-4" />
-              {isBatchMode ? 'Cancel Selection' : 'Select & Delete'}
+              {isBatchMode ? 'Exit Batch Mode' : 'Batch Select'}
             </button>
 
-            {/* Category Manager Button */}
+            {/* Category Manager */}
             <button
               onClick={() => setShowCategoryManager(true)}
-              className={`p-2 rounded-lg border transition-all ${
+              className={`p-2 rounded-xl border transition-all ${
                 darkMode
                   ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                   : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
-              title="Manage Categories & Colors"
+              title="Manage Categories & Tag Colors"
             >
               <Tag className="w-4 h-4" />
             </button>
 
-            {/* Analytics Modal Toggle */}
+            {/* Analytics Toggle */}
             <button
               onClick={() => setShowAnalytics(true)}
-              className={`p-2 rounded-lg border transition-all ${
+              className={`p-2 rounded-xl border transition-all ${
                 darkMode
                   ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                   : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
-              title="Time Utilization Analytics"
+              title="Time Analytics Dashboard"
             >
               <BarChart3 className="w-4 h-4" />
             </button>
 
-            {/* Export & Import Group */}
-            <div className="flex items-center border rounded-lg overflow-hidden dark:border-slate-700 border-slate-200">
+            {/* Export & Import Utilities */}
+            <div className="flex items-center border rounded-xl overflow-hidden dark:border-slate-700 border-slate-200">
               <button
                 onClick={exportJSON}
                 className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                title="Export JSON Backup"
+                title="Export JSON Schedule"
               >
                 <FileCode className="w-4 h-4" />
               </button>
@@ -782,17 +845,17 @@ export default function App() {
               </button>
               <label
                 className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200 cursor-pointer"
-                title="Import JSON Backup"
+                title="Import JSON Data"
               >
                 <Upload className="w-4 h-4" />
                 <input type="file" accept=".json" onChange={importJSON} className="hidden" />
               </label>
             </div>
 
-            {/* Dark Mode Toggle */}
+            {/* Dark / Light Toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className={`p-2 rounded-lg border transition-all ${
+              className={`p-2 rounded-xl border transition-all ${
                 darkMode
                   ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700'
                   : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -802,7 +865,7 @@ export default function App() {
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Add New Activity Button */}
+            {/* Add Activity Button */}
             <button
               onClick={() =>
                 setEditingActivity({
@@ -811,12 +874,12 @@ export default function App() {
                   date: scheduleDates[0] || '2026-01-20',
                   startTime: '09:00',
                   endTime: '10:00',
-                  categoryId: categories[0]?.id || '',
+                  categoryIds: [categories[0]?.id || 'cat-work'],
                   notes: '',
                   isNew: true,
                 })
               }
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
               New Activity
@@ -824,13 +887,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* SUB-HEADER: CATEGORY FILTERS & BATCH STATUS */}
-        <div className={`px-4 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100/70 border-slate-200'}`}>
-          
-          {/* Category Filters */}
+        {/* Sub-bar Filter Options & Multi-Tag Context */}
+        <div
+          className={`px-4 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${
+            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100/70 border-slate-200'
+          }`}
+        >
+          {/* Category Filter Pills */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-              <Filter className="w-3.5 h-3.5" /> Filter:
+              <Filter className="w-3.5 h-3.5" /> Filter Tags:
             </span>
             {categories.map((cat) => {
               const isActive = activeCategoryFilters.includes(cat.id);
@@ -871,11 +937,11 @@ export default function App() {
             )}
           </div>
 
-          {/* Batch Mode Bar Controls */}
+          {/* Batch Mode Top Notice */}
           {isBatchMode && (
             <div className="flex items-center gap-2">
               <span className="font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                <CheckSquare className="w-3.5 h-3.5" /> Select Mode Active
+                <CheckSquare className="w-3.5 h-3.5" /> Multi-Select Active
               </span>
               <button
                 onClick={handleSelectAll}
@@ -897,15 +963,20 @@ export default function App() {
         </div>
       </header>
 
-      {}
       <main className="flex-1 overflow-x-auto p-4 max-w-[1600px] w-full mx-auto">
-        <div className={`min-w-[1000px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-          
-          {/* DYNAMIC DATE HEADERS */}
+        <div
+          ref={mainGridRef}
+          className={`min-w-[1000px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${
+            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}
+        >
+          {/* Dynamic Columns Header */}
           <div
-            className={`grid sticky top-[108px] z-20 border-b ${darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'}`}
+            className={`grid sticky top-[108px] z-20 border-b ${
+              darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'
+            }`}
             style={{
-              gridTemplateColumns: `100px repeat(${scheduleDates.length}, minmax(120px, 1fr))`
+              gridTemplateColumns: `80px repeat(${scheduleDates.length}, minmax(120px, 1fr))`,
             }}
           >
             {/* Time Column Header */}
@@ -913,7 +984,7 @@ export default function App() {
               <Clock className="w-3.5 h-3.5" /> Time
             </div>
 
-            {/* Dynamic Days Column Headers */}
+            {/* Date Column Headers */}
             {scheduleDates.map((dateStr) => {
               const { dayName, formattedDate } = formatDateLabel(dateStr);
               const dayCount = filteredActivities.filter((a) => a.date === dateStr).length;
@@ -923,16 +994,16 @@ export default function App() {
                   key={dateStr}
                   onClick={() => setSelectedDayView(dateStr)}
                   className="p-3 border-r last:border-r-0 dark:border-slate-800 border-slate-200 text-center cursor-pointer group hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition-all relative"
-                  title="Click to open Expanded Single Day View"
+                  title="Click to expand full Single Day View"
                 >
-                  <div className="font-bold text-sm tracking-tight flex items-center justify-center gap-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                  <div className="font-bold text-xs md:text-sm tracking-tight flex items-center justify-center gap-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                     {dayName}
                     <Maximize2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center justify-center gap-1 mt-0.5">
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-center gap-1 mt-0.5">
                     <span>{formattedDate}</span>
                     {dayCount > 0 && (
-                      <span className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">
+                      <span className="w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center">
                         {dayCount}
                       </span>
                     )}
@@ -942,23 +1013,26 @@ export default function App() {
             })}
           </div>
 
-          {/* TIMETABLE GRID BODY */}
+          {/* Timetable Body Grid */}
           <div
-            ref={gridContainerRef}
             className="grid relative"
             style={{
-              height: `${MAIN_GRID_HEIGHT}px`,
-              gridTemplateColumns: `100px repeat(${scheduleDates.length}, minmax(120px, 1fr))`
+              gridTemplateColumns: `80px repeat(${scheduleDates.length}, minmax(120px, 1fr))`,
+              height: `${mainGridHeight}px`,
             }}
           >
-            {/* TIME SLOTS AXIS (LEFT COLUMN) */}
-            <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${darkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
-              {Array.from({ length: 12 }).map((_, idx) => {
-                const hourMins = GRID_START_MINUTES + idx * 60;
+            {/* Time Axis Column */}
+            <div
+              className={`border-r dark:border-slate-800 border-slate-200 select-none ${
+                darkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'
+              }`}
+            >
+              {Array.from({ length: totalHours }).map((_, idx) => {
+                const hourMins = gridStartMins + idx * 60;
                 return (
                   <div
                     key={idx}
-                    className="border-b dark:border-slate-800/60 border-slate-200/80 pr-2 text-right font-medium text-xs text-slate-400 flex items-start justify-end pt-1"
+                    className="border-b dark:border-slate-800/60 border-slate-200/80 pr-2 text-right font-medium text-[11px] text-slate-400 flex items-start justify-end pt-1"
                     style={{ height: `${MAIN_HOUR_HEIGHT}px` }}
                   >
                     {formatDisplayTime(minutesToTime(hourMins))}
@@ -967,7 +1041,7 @@ export default function App() {
               })}
             </div>
 
-            {/* DYNAMIC DAY COLUMNS & ACTIVITIES */}
+            {/* Date Columns & Draggable Activity Blocks */}
             {scheduleDates.map((dateStr) => {
               const dayActivities = filteredActivities.filter((a) => a.date === dateStr);
               const layoutItems = calculateOverlaps(dayActivities);
@@ -979,12 +1053,12 @@ export default function App() {
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const clickY = e.clientY - rect.top;
-                    const clickedMinute = GRID_START_MINUTES + (clickY / MAIN_GRID_HEIGHT) * TOTAL_MINUTES;
+                    const clickedMinute = gridStartMins + (clickY / mainGridHeight) * totalMinutes;
                     handleGridCellClick(dateStr, clickedMinute);
                   }}
                 >
-                  {/* Hourly Background Lines */}
-                  {Array.from({ length: 12 }).map((_, idx) => (
+                  {/* Hourly Background Horizontal Lines */}
+                  {Array.from({ length: totalHours }).map((_, idx) => (
                     <div
                       key={idx}
                       className="border-b dark:border-slate-800/40 border-slate-100 pointer-events-none"
@@ -992,8 +1066,8 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Half-Hour Dash Guidelines */}
-                  {Array.from({ length: 12 }).map((_, idx) => (
+                  {/* Half-Hour Dashed Subdivision Lines */}
+                  {Array.from({ length: totalHours }).map((_, idx) => (
                     <div
                       key={`sub-${idx}`}
                       className="border-b border-dashed dark:border-slate-800/20 border-slate-100 pointer-events-none absolute w-full"
@@ -1001,14 +1075,16 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Activity Block Cards */}
+                  {/* Activity Blocks */}
                   {layoutItems.map((act) => {
-                    const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
+                    const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
+                    const bgStyle = getMultiTagBackground(actCatIds, categoryMap, darkMode);
+
                     const startMins = timeToMinutes(act.startTime);
                     const endMins = timeToMinutes(act.endTime);
-                    
-                    const topPx = ((startMins - GRID_START_MINUTES) / TOTAL_MINUTES) * MAIN_GRID_HEIGHT;
-                    const heightPx = ((endMins - startMins) / TOTAL_MINUTES) * MAIN_GRID_HEIGHT;
+
+                    const topPx = ((startMins - gridStartMins) / totalMinutes) * mainGridHeight;
+                    const heightPx = ((endMins - startMins) / totalMinutes) * mainGridHeight;
 
                     const widthPercent = 100 / (act.totalColumns || 1);
                     const leftPercent = (act.columnIndex || 0) * widthPercent;
@@ -1031,11 +1107,12 @@ export default function App() {
                           height: `${Math.max(26, heightPx)}px`,
                           left: `${leftPercent}%`,
                           width: `${widthPercent}%`,
-                          backgroundColor: `${category.color}22`,
-                          borderColor: category.color,
+                          ...bgStyle,
                         }}
-                        className={`absolute rounded-lg border-l-4 border-y border-r p-1.5 text-xs shadow-sm cursor-pointer transition-all duration-75 overflow-hidden flex flex-col justify-between group/card ${
-                          isSelected ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/30' : 'hover:shadow-md hover:z-10'
+                        className={`absolute rounded-xl border-l-4 border-y border-r p-1.5 text-xs shadow-sm cursor-pointer transition-all duration-75 overflow-hidden flex flex-col justify-between group/card ${
+                          isSelected
+                            ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/30'
+                            : 'hover:shadow-md hover:z-10'
                         } ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}
                       >
                         {/* Top Resize Handle */}
@@ -1046,7 +1123,7 @@ export default function App() {
                           />
                         )}
 
-                        {/* Top Card Header */}
+                        {/* Title & Tag Pills Header */}
                         <div className="flex items-start justify-between gap-1 pointer-events-none">
                           <div className="flex items-center gap-1 min-w-0">
                             {isBatchMode && (
@@ -1055,7 +1132,7 @@ export default function App() {
                                   e.stopPropagation();
                                   toggleSelectActivity(act.id);
                                 }}
-                                className="pointer-events-auto mr-0.5"
+                                className="pointer-events-auto mr-1"
                               >
                                 {isSelected ? (
                                   <CheckSquare className="w-4 h-4 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
@@ -1064,32 +1141,43 @@ export default function App() {
                                 )}
                               </div>
                             )}
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: category.color }}
-                            />
-                            <p className="font-bold truncate leading-tight text-[11px]">{act.title || 'Untitled'}</p>
+
+                            {/* Tag Color Indicators */}
+                            <div className="flex items-center -space-x-1 shrink-0">
+                              {actCatIds.map((id) => (
+                                <span
+                                  key={id}
+                                  className="w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 shadow-sm"
+                                  style={{ backgroundColor: categoryMap[id]?.color || '#94a3b8' }}
+                                  title={categoryMap[id]?.name}
+                                />
+                              ))}
+                            </div>
+
+                            <p className="font-bold truncate leading-tight text-[11px] ml-0.5">
+                              {act.title || 'Untitled'}
+                            </p>
                           </div>
                         </div>
 
-                        {/* Middle Content */}
+                        {/* Time & Notes */}
                         <div className="my-0.5 pointer-events-none">
-                          <p className="text-[10px] font-semibold opacity-80 flex items-center gap-1">
+                          <p className="text-[10px] font-semibold opacity-85">
                             {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
                           </p>
-                          {heightPx > 45 && act.notes && (
-                            <p className="text-[10px] opacity-70 truncate mt-0.5 italic">{act.notes}</p>
+                          {heightPx > 50 && act.notes && (
+                            <p className="text-[10px] opacity-75 truncate italic mt-0.5">{act.notes}</p>
                           )}
                         </div>
 
-                        {/* Drag Handle Overlay */}
+                        {/* Center Drag Handle Overlay */}
                         {!isBatchMode && (
                           <div
                             onMouseDown={(e) => handleMouseDown(e, act, 'move', 'main')}
-                            className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 flex items-center justify-center"
+                            className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px] transition-opacity"
                           >
-                            <span className="text-[9px] font-bold bg-slate-900/70 text-white px-1.5 py-0.5 rounded shadow backdrop-blur-sm pointer-events-none">
-                              Drag 5m
+                            <span className="text-[9px] font-bold bg-slate-900 text-white px-2 py-0.5 rounded shadow pointer-events-none flex items-center gap-1">
+                              <Move className="w-2.5 h-2.5" /> Drag
                             </span>
                           </div>
                         )}
@@ -1111,28 +1199,28 @@ export default function App() {
         </div>
       </main>
 
-      {}
       {selectedDayView && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-hidden">
-          <div className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
-            darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-          }`}>
-            
-            {/* Day Modal Header Bar */}
-            <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 ${
-              darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50 border-slate-200'
-            }`}>
-              {/* Day Navigation */}
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-hidden">
+          <div
+            className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden animate-fadeIn ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
+            {/* Modal Header */}
+            <div
+              className={`px-6 py-4 border-b flex items-center justify-between gap-4 ${
+                darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
               <div className="flex items-center gap-3">
+                {/* Day Navigation */}
                 <button
                   onClick={() => {
-                    const currentIndex = scheduleDates.indexOf(selectedDayView);
-                    if (currentIndex > 0) {
-                      setSelectedDayView(scheduleDates[currentIndex - 1]);
-                    }
+                    const idx = scheduleDates.indexOf(selectedDayView);
+                    if (idx > 0) setSelectedDayView(scheduleDates[idx - 1]);
                   }}
                   disabled={scheduleDates.indexOf(selectedDayView) === 0}
-                  className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
+                  className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
                   title="Previous Day"
                 >
                   <ChevronLeft className="w-5 h-5" />
@@ -1146,26 +1234,23 @@ export default function App() {
                     </h2>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    High Resolution Single Day View • 5-min precision grid
+                    High Resolution Day View • 5-minute precision grid snapping
                   </p>
                 </div>
 
                 <button
                   onClick={() => {
-                    const currentIndex = scheduleDates.indexOf(selectedDayView);
-                    if (currentIndex < scheduleDates.length - 1) {
-                      setSelectedDayView(scheduleDates[currentIndex + 1]);
-                    }
+                    const idx = scheduleDates.indexOf(selectedDayView);
+                    if (idx < scheduleDates.length - 1) setSelectedDayView(scheduleDates[idx + 1]);
                   }}
                   disabled={scheduleDates.indexOf(selectedDayView) === scheduleDates.length - 1}
-                  className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
+                  className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
                   title="Next Day"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() =>
@@ -1175,12 +1260,12 @@ export default function App() {
                       date: selectedDayView,
                       startTime: '09:00',
                       endTime: '10:00',
-                      categoryId: categories[0]?.id || '',
+                      categoryIds: [categories[0]?.id || 'cat-work'],
                       notes: '',
                       isNew: true,
                     })
                   }
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Add Activity
                 </button>
@@ -1188,24 +1273,27 @@ export default function App() {
                 <button
                   onClick={() => setSelectedDayView(null)}
                   className="px-3.5 py-1.5 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs rounded-xl hover:opacity-90 transition-all flex items-center gap-1.5 shadow"
-                  title="Return to Full Schedule Grid"
                 >
                   <Minimize2 className="w-4 h-4" /> Close Day View
                 </button>
               </div>
             </div>
 
-            {/* Expanded Day View Area */}
+            {/* Single Day High-Res Interactive Grid */}
             <div className="flex-1 overflow-y-auto relative p-4">
-              <div className="max-w-3xl mx-auto rounded-xl border dark:border-slate-800 border-slate-200 overflow-hidden relative" style={{ height: `${DAY_VIEW_GRID_HEIGHT}px` }}>
-                <div className="grid grid-cols-[100px_1fr] h-full relative">
-                  
-                  {/* Time Column */}
-                  <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${
-                    darkMode ? 'bg-slate-900/60' : 'bg-slate-50'
-                  }`}>
-                    {Array.from({ length: 12 }).map((_, idx) => {
-                      const hourMins = GRID_START_MINUTES + idx * 60;
+              <div
+                className="max-w-3xl mx-auto rounded-xl border dark:border-slate-800 border-slate-200 overflow-hidden relative"
+                style={{ height: `${dayViewGridHeight}px` }}
+              >
+                <div className="grid grid-cols-[90px_1fr] h-full relative">
+                  {/* Left Time Axis */}
+                  <div
+                    className={`border-r dark:border-slate-800 border-slate-200 select-none ${
+                      darkMode ? 'bg-slate-900/60' : 'bg-slate-50'
+                    }`}
+                  >
+                    {Array.from({ length: totalHours }).map((_, idx) => {
+                      const hourMins = gridStartMins + idx * 60;
                       return (
                         <div
                           key={idx}
@@ -1218,18 +1306,18 @@ export default function App() {
                     })}
                   </div>
 
-                  {/* Interactive Column Grid */}
+                  {/* Day Column Area */}
                   <div
                     className="relative transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 cursor-pointer"
                     onClick={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       const clickY = e.clientY - rect.top;
-                      const clickedMinute = GRID_START_MINUTES + (clickY / DAY_VIEW_GRID_HEIGHT) * TOTAL_MINUTES;
+                      const clickedMinute = gridStartMins + (clickY / dayViewGridHeight) * totalMinutes;
                       handleGridCellClick(selectedDayView, clickedMinute);
                     }}
                   >
-                    {/* Hourly Lines */}
-                    {Array.from({ length: 12 }).map((_, idx) => (
+                    {/* Hour Lines */}
+                    {Array.from({ length: totalHours }).map((_, idx) => (
                       <div
                         key={idx}
                         className="border-b dark:border-slate-800/60 border-slate-200 pointer-events-none"
@@ -1237,8 +1325,8 @@ export default function App() {
                       />
                     ))}
 
-                    {/* 15-Min Lines */}
-                    {Array.from({ length: 48 }).map((_, idx) => (
+                    {/* 15-Min Sub-guidelines */}
+                    {Array.from({ length: totalHours * 4 }).map((_, idx) => (
                       <div
                         key={`sub15-${idx}`}
                         className="border-b border-dashed dark:border-slate-800/30 border-slate-100 pointer-events-none absolute w-full"
@@ -1246,14 +1334,16 @@ export default function App() {
                       />
                     ))}
 
-                    {/* Day Activities */}
+                    {/* Single Day Activity Cards */}
                     {calculateOverlaps(filteredActivities.filter((a) => a.date === selectedDayView)).map((act) => {
-                      const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
+                      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
+                      const bgStyle = getMultiTagBackground(actCatIds, categoryMap, darkMode);
+
                       const startMins = timeToMinutes(act.startTime);
                       const endMins = timeToMinutes(act.endTime);
-                      
-                      const topPx = ((startMins - GRID_START_MINUTES) / TOTAL_MINUTES) * DAY_VIEW_GRID_HEIGHT;
-                      const heightPx = ((endMins - startMins) / TOTAL_MINUTES) * DAY_VIEW_GRID_HEIGHT;
+
+                      const topPx = ((startMins - gridStartMins) / totalMinutes) * dayViewGridHeight;
+                      const heightPx = ((endMins - startMins) / totalMinutes) * dayViewGridHeight;
 
                       const widthPercent = 100 / (act.totalColumns || 1);
                       const leftPercent = (act.columnIndex || 0) * widthPercent;
@@ -1273,14 +1363,15 @@ export default function App() {
                           }}
                           style={{
                             top: `${topPx}px`,
-                            height: `${Math.max(36, heightPx)}px`,
+                            height: `${Math.max(40, heightPx)}px`,
                             left: `${leftPercent}%`,
                             width: `${widthPercent}%`,
-                            backgroundColor: `${category.color}25`,
-                            borderColor: category.color,
+                            ...bgStyle,
                           }}
                           className={`absolute rounded-xl border-l-8 border-y border-r p-3 text-xs shadow-md cursor-pointer transition-all overflow-hidden flex flex-col justify-between group/daycard ${
-                            isSelected ? 'ring-4 ring-rose-500 bg-rose-500/30' : 'hover:shadow-lg hover:z-10'
+                            isSelected
+                              ? 'ring-4 ring-rose-500 bg-rose-500/30'
+                              : 'hover:shadow-lg hover:z-10'
                           } ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}
                         >
                           {/* Top Resize Handle */}
@@ -1291,9 +1382,9 @@ export default function App() {
                             />
                           )}
 
-                          {/* Content Row */}
+                          {/* Top Tag Pills & Title */}
                           <div className="flex items-start justify-between gap-2 pointer-events-none">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               {isBatchMode && (
                                 <div
                                   onClick={(e) => {
@@ -1309,12 +1400,17 @@ export default function App() {
                                   )}
                                 </div>
                               )}
-                              <span
-                                className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm"
-                                style={{ backgroundColor: category.color }}
-                              >
-                                {category.name}
-                              </span>
+
+                              {actCatIds.map((id) => (
+                                <span
+                                  key={id}
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1"
+                                  style={{ backgroundColor: categoryMap[id]?.color || '#64748B' }}
+                                >
+                                  {categoryMap[id]?.name}
+                                </span>
+                              ))}
+
                               <h4 className="font-bold text-sm tracking-tight">{act.title || 'Untitled'}</h4>
                             </div>
 
@@ -1329,14 +1425,14 @@ export default function App() {
                             </p>
                           )}
 
-                          {/* Drag Overlay Bar */}
+                          {/* Center Drag Overlay */}
                           {!isBatchMode && (
                             <div
                               onMouseDown={(e) => handleMouseDown(e, act, 'move', 'dayView')}
                               className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/daycard:opacity-100 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px] transition-opacity"
                             >
-                              <span className="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full shadow pointer-events-none">
-                                Drag to move (5m snap)
+                              <span className="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full shadow pointer-events-none flex items-center gap-1">
+                                <Move className="w-3.5 h-3.5" /> Drag to reposition (5m snap)
                               </span>
                             </div>
                           )}
@@ -1359,115 +1455,8 @@ export default function App() {
         </div>
       )}
 
-      {}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-indigo-500" />
-                Schedule Settings & Range
-              </h3>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Schedule Planner Title</label>
-                <input
-                  type="text"
-                  value={plannerTitle}
-                  onChange={(e) => setPlannerTitle(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                    darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Date</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Date</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Quick Range Presets */}
-              <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Quick Range Presets</label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => {
-                      setStartDate('2026-01-20');
-                      setEndDate('2026-01-27');
-                    }}
-                    className="px-2.5 py-1 rounded-lg border font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    Jan 20 – Jan 27, 2026
-                  </button>                  <button
-                    onClick={() => {
-                      const today = new Date();
-                      const yyyy = today.getFullYear();
-                      const mm = String(today.getMonth() + 1).padStart(2, '0');
-                      const dd = String(today.getDate()).padStart(2, '0');
-                      const start = `${yyyy}-${mm}-${dd}`;
-
-                      const nextWeek = new Date(today);
-                      nextWeek.setDate(nextWeek.getDate() + 6);
-                      const nyyyy = nextWeek.getFullYear();
-                      const nmm = String(nextWeek.getMonth() + 1).padStart(2, '0');
-                      const ndd = String(nextWeek.getDate()).padStart(2, '0');
-                      const end = `${nyyyy}-${nmm}-${ndd}`;
-
-                      setStartDate(start);
-                      setEndDate(end);
-                    }}
-                    className="px-2.5 py-1 rounded-lg border font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    Next 7 Days
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t dark:border-slate-800 border-slate-200 flex justify-end">
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow"
-                >
-                  Save & Apply Range
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {}
       {isBatchMode && selectedActivityIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4 animate-bounce">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
             <span className="font-bold text-sm">
@@ -1484,10 +1473,14 @@ export default function App() {
         </div>
       )}
 
-      {/* CONFIRM BATCH DELETE DIALOG */}
+      {/* Batch Delete Confirm Dialog */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div
+            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
             <div className="flex items-center gap-3 text-rose-500 mb-4">
               <div className="p-3 rounded-full bg-rose-100 dark:bg-rose-950/80">
                 <AlertTriangle className="w-6 h-6" />
@@ -1503,8 +1496,12 @@ export default function App() {
               <span className="font-bold text-rose-600 dark:text-rose-400">{selectedActivityIds.length}</span> selected activity items?
             </p>
 
-            <div className={`p-3 rounded-xl max-h-36 overflow-y-auto mb-6 text-xs border ${darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-              <p className="font-bold mb-2 text-slate-400 uppercase text-[10px] tracking-wider">Items to be removed:</p>
+            <div
+              className={`p-3 rounded-xl max-h-36 overflow-y-auto mb-6 text-xs border ${
+                darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <p className="font-bold mb-2 text-slate-400 uppercase text-[10px] tracking-wider">Items to remove:</p>
               <ul className="space-y-1">
                 {activities
                   .filter((a) => selectedActivityIds.includes(a.id))
@@ -1538,11 +1535,13 @@ export default function App() {
         </div>
       )}
 
-      {}
       {editingActivity && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-            
+          <div
+            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-indigo-500" />
@@ -1577,13 +1576,57 @@ export default function App() {
                   required
                   value={editingActivity.title}
                   onChange={(e) => setEditingActivity({ ...editingActivity, title: e.target.value })}
-                  placeholder="e.g. Deep Work Session"
+                  placeholder="e.g. Deep Work & Architecture"
                   className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
                     darkMode
                       ? 'bg-slate-800 border-slate-700 text-slate-100 focus:border-indigo-500'
                       : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
                   }`}
                 />
+              </div>
+
+              {/* Multi-Tag Selection Checkboxes / Pills */}
+              <div>
+                <label className="block font-semibold mb-1.5 text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                  <span>Categories / Tags (Select multiple for striped gradient)</span>
+                  <span className="text-[10px] text-indigo-500 font-medium">Multi-tag supported</span>
+                </label>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 rounded-xl border dark:border-slate-800 border-slate-200">
+                  {categories.map((cat) => {
+                    const currentTags = editingActivity.categoryIds || [];
+                    const isChecked = currentTags.includes(cat.id);
+
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          const updated = isChecked
+                            ? currentTags.filter((id) => id !== cat.id)
+                            : [...currentTags, cat.id];
+                          setEditingActivity({ ...editingActivity, categoryIds: updated });
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                          isChecked
+                            ? 'text-white border-transparent shadow-sm'
+                            : darkMode
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                        }`}
+                        style={{
+                          backgroundColor: isChecked ? cat.color : undefined,
+                        }}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: isChecked ? '#fff' : cat.color }}
+                        />
+                        {cat.name}
+                        {isChecked && <Check className="w-3 h-3 ml-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1608,30 +1651,11 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Category</label>
-                  <select
-                    value={editingActivity.categoryId}
-                    onChange={(e) => setEditingActivity({ ...editingActivity, categoryId: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
                   <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Time</label>
                   <input
                     type="time"
-                    min="06:00"
-                    max="18:00"
+                    min="00:00"
+                    max="23:59"
                     step="300"
                     required
                     value={editingActivity.startTime}
@@ -1641,13 +1665,15 @@ export default function App() {
                     }`}
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Time</label>
                   <input
                     type="time"
-                    min="06:00"
-                    max="18:00"
+                    min="00:00"
+                    max="23:59"
                     step="300"
                     required
                     value={editingActivity.endTime}
@@ -1657,15 +1683,28 @@ export default function App() {
                     }`}
                   />
                 </div>
+
+                {/* Preview strip */}
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Visual Gradient</label>
+                  <div
+                    className="h-9 rounded-xl border flex items-center justify-center font-bold text-[10px] text-slate-700 dark:text-slate-200 shadow-inner"
+                    style={getMultiTagBackground(editingActivity.categoryIds, categoryMap, darkMode)}
+                  >
+                    {editingActivity.categoryIds?.length > 1
+                      ? `${editingActivity.categoryIds.length} Tags Mixture`
+                      : categoryMap[editingActivity.categoryIds?.[0]]?.name || 'Single Tag'}
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Agenda</label>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Details</label>
                 <textarea
                   rows={3}
                   value={editingActivity.notes || ''}
                   onChange={(e) => setEditingActivity({ ...editingActivity, notes: e.target.value })}
-                  placeholder="Add details, links or action items..."
+                  placeholder="Add details, links or agenda notes..."
                   className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
                     darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                   }`}
@@ -1684,7 +1723,9 @@ export default function App() {
                   >
                     <Trash2 className="w-4 h-4" /> Delete
                   </button>
-                ) : <span />}
+                ) : (
+                  <span />
+                )}
 
                 <div className="flex items-center gap-2">
                   <button
@@ -1709,14 +1750,169 @@ export default function App() {
         </div>
       )}
 
-      {}
+      {showDateSettings && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-indigo-500" />
+                Schedule Range & Time Window
+              </h3>
+              <button
+                onClick={() => setShowDateSettings(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Presets */}
+              <div>
+                <label className="block font-semibold mb-1.5 text-slate-600 dark:text-slate-400">Quick Presets</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => {
+                      setStartDate('2026-01-20');
+                      setEndDate('2026-01-27');
+                    }}
+                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
+                  >
+                    Jan 20 – Jan 27
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const yyyy = today.getFullYear();
+                      const mm = String(today.getMonth() + 1).padStart(2, '0');
+                      const dd = String(today.getDate()).padStart(2, '0');
+                      const end = new Date();
+                      end.setDate(end.getDate() + 6);
+                      const ey = end.getFullYear();
+                      const em = String(end.getMonth() + 1).padStart(2, '0');
+                      const ed = String(end.getDate()).padStart(2, '0');
+                      setStartDate(`${yyyy}-${mm}-${dd}`);
+                      setEndDate(`${ey}-${em}-${ed}`);
+                    }}
+                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
+                  >
+                    7 Days From Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const yyyy = today.getFullYear();
+                      const mm = String(today.getMonth() + 1).padStart(2, '0');
+                      const dd = String(today.getDate()).padStart(2, '0');
+                      const end = new Date();
+                      end.setDate(end.getDate() + 13);
+                      const ey = end.getFullYear();
+                      const em = String(end.getMonth() + 1).padStart(2, '0');
+                      const ed = String(end.getDate()).padStart(2, '0');
+                      setStartDate(`${yyyy}-${mm}-${dd}`);
+                      setEndDate(`${ey}-${em}-${ed}`);
+                    }}
+                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
+                  >
+                    14 Days Range
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Date Inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Grid Time Window Hours */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t dark:border-slate-800 border-slate-200">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Daily Start Hour</label>
+                  <select
+                    value={startHour}
+                    onChange={(e) => setStartHour(Number(e.target.value))}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <option key={i} value={i}>
+                        {i === 0 ? '12:00 AM' : `${i}:00 AM`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Daily End Hour</label>
+                  <select
+                    value={endHour}
+                    onChange={(e) => setEndHour(Number(e.target.value))}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {Array.from({ length: 13 }).map((_, i) => {
+                      const h = i + 12;
+                      return (
+                        <option key={h} value={h}>
+                          {h === 12 ? '12:00 PM' : h === 24 ? '12:00 AM Next Day' : `${h - 12}:00 PM`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t dark:border-slate-800 border-slate-200 flex justify-end">
+                <button
+                  onClick={() => setShowDateSettings(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
+                >
+                  Apply Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCategoryManager && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`max-w-lg w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div
+            className={`max-w-lg w-full rounded-2xl p-6 shadow-2xl border ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <Tag className="w-4 h-4 text-indigo-500" />
-                Category & Color Tag Manager
+                Category & Tag Color Manager
               </h3>
               <button
                 onClick={() => setShowCategoryManager(false)}
@@ -1726,7 +1922,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
               {categories.map((cat) => (
                 <div
                   key={cat.id}
@@ -1755,7 +1951,7 @@ export default function App() {
                           prev.map((c) => (c.id === cat.id ? { ...c, name: newName } : c))
                         );
                       }}
-                      className={`font-semibold text-xs px-2 py-1 rounded-lg border outline-none w-full ${
+                      className={`font-semibold text-xs px-2.5 py-1.5 rounded-lg border outline-none w-full ${
                         darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
                       }`}
                     />
@@ -1780,14 +1976,14 @@ export default function App() {
                 onClick={() => {
                   const newCat = {
                     id: 'cat-' + Date.now(),
-                    name: 'New Category',
+                    name: 'New Tag',
                     color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
                   };
                   setCategories((prev) => [...prev, newCat]);
                 }}
                 className="px-3.5 py-1.5 bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold rounded-xl hover:bg-indigo-100 flex items-center gap-1.5"
               >
-                <Plus className="w-4 h-4" /> Add Category
+                <Plus className="w-4 h-4" /> Add Tag / Category
               </button>
 
               <button
@@ -1801,14 +1997,17 @@ export default function App() {
         </div>
       )}
 
-      {}
       {showAnalytics && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`max-w-xl w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div
+            className={`max-w-xl w-full rounded-2xl p-6 shadow-2xl border ${
+              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-indigo-500" />
-                Time Utilization Analytics
+                Time Breakdown & Tag Utilization
               </h3>
               <button
                 onClick={() => setShowAnalytics(false)}
@@ -1819,10 +2018,10 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-              Total scheduled hours across all active days in range ({formatDateLabel(startDate).formattedDate} – {formatDateLabel(endDate).formattedDate}).
+              Hours allocated across tags (multi-tagged activities are split proportionally among tags).
             </p>
 
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
               {categoryAnalytics.map((cat) => (
                 <div key={cat.id} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-medium">
@@ -1831,11 +2030,15 @@ export default function App() {
                       <span className="font-bold">{cat.name}</span>
                     </span>
                     <span className="text-slate-500 dark:text-slate-400">
-                      {cat.hours} hrs ({cat.percentage}%) • {cat.count} items
+                      {cat.hours} hrs ({cat.percentage}%) • {cat.count} tagged
                     </span>
                   </div>
 
-                  <div className={`h-3 rounded-full overflow-hidden w-full ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <div
+                    className={`h-3 rounded-full overflow-hidden w-full ${
+                      darkMode ? 'bg-slate-800' : 'bg-slate-100'
+                    }`}
+                  >
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -1853,13 +2056,12 @@ export default function App() {
                 onClick={() => setShowAnalytics(false)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
               >
-                Close Analytics
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
