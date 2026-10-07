@@ -28,31 +28,22 @@ import {
   FileCode,
   Sparkles,
   Layers,
-  CalendarDays
+  CalendarDays,
+  Pencil,
+  RotateCcw,
+  Sliders
 } from 'lucide-react';
 
 const GRID_START_MINUTES = 360; // 6:00 AM
 const GRID_END_MINUTES = 1080;   // 6:00 PM
 const TOTAL_MINUTES = GRID_END_MINUTES - GRID_START_MINUTES; // 720 minutes (12 hours)
 
-// Grid scaling
-const MAIN_HOUR_HEIGHT = 80; // 80px per hour in main week view
+// Pixel heights per hour
+const MAIN_HOUR_HEIGHT = 80; 
 const MAIN_GRID_HEIGHT = (TOTAL_MINUTES / 60) * MAIN_HOUR_HEIGHT; // 960px
 
-const DAY_VIEW_HOUR_HEIGHT = 120; // 120px per hour in expanded single day view (higher resolution)
+const DAY_VIEW_HOUR_HEIGHT = 120; 
 const DAY_VIEW_GRID_HEIGHT = (TOTAL_MINUTES / 60) * DAY_VIEW_HOUR_HEIGHT; // 1440px
-
-// Fixed Schedule Dates: Jan 20, 2026 to Jan 27, 2026 (8 full days)
-const SCHEDULE_DATES = [
-  '2026-01-20',
-  '2026-01-21',
-  '2026-01-22',
-  '2026-01-23',
-  '2026-01-24',
-  '2026-01-25',
-  '2026-01-26',
-  '2026-01-27',
-];
 
 const PRESET_COLORS = [
   '#3B82F6', // Blue
@@ -211,6 +202,7 @@ const formatDisplayTime = (timeStr) => {
 };
 
 const formatDateLabel = (dateStr) => {
+  if (!dateStr) return { dayName: '', fullDayName: '', formattedDate: '', fullFormattedDate: '' };
   const [year, month, day] = dateStr.split('-').map(Number);
   const dateObj = new Date(year, month - 1, day);
   const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
@@ -218,6 +210,30 @@ const formatDateLabel = (dateStr) => {
   const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
   const fullMonthName = dateObj.toLocaleDateString('en-US', { month: 'long' });
   return { dayName, fullDayName, formattedDate: `${monthName} ${day}`, fullFormattedDate: `${fullMonthName} ${day}, ${year}` };
+};
+
+// Generates an array of date strings ('YYYY-MM-DD') between startDate and endDate
+const generateDateRange = (startStr, endStr) => {
+  if (!startStr || !endStr) return [];
+  const dates = [];
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+    return [startStr];
+  }
+
+  const current = new Date(start);
+  let limitCount = 0;
+  while (current <= end && limitCount < 31) { // Cap at 31 days max to preserve UI responsiveness
+    const yyyy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+    current.setDate(current.getDate() + 1);
+    limitCount++;
+  }
+  return dates;
 };
 
 const calculateOverlaps = (activities) => {
@@ -280,6 +296,26 @@ const calculateOverlaps = (activities) => {
 };
 
 export default function App() {
+  // Title & Date Range Settings
+  const [plannerTitle, setPlannerTitle] = useState(() => {
+    return localStorage.getItem('planner_title') || 'Master Schedule Planner';
+  });
+  const [startDate, setStartDate] = useState(() => {
+    return localStorage.getItem('planner_start_date') || '2026-01-20';
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return localStorage.getItem('planner_end_date') || '2026-01-27';
+  });
+
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Dynamic Date Range Columns
+  const scheduleDates = useMemo(() => {
+    return generateDateRange(startDate, endDate);
+  }, [startDate, endDate]);
+
+  // Data Store
   const [activities, setActivities] = useState(() => {
     const saved = localStorage.getItem('planner_activities');
     if (saved) {
@@ -296,11 +332,14 @@ export default function App() {
     return DEFAULT_CATEGORIES;
   });
 
+  // UI States
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilters, setActiveCategoryFilters] = useState([]);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('planner_dark') === 'true';
+  });
 
-  // Expanded Single Day View Pop-up state (null or date string e.g. '2026-01-20')
+  // Expanded Single Day View Pop-up state
   const [selectedDayView, setSelectedDayView] = useState(null);
 
   // Batch Selection & Deletion State
@@ -315,8 +354,20 @@ export default function App() {
 
   // Drag & Resize State
   const [dragState, setDragState] = useState(null);
+  const gridContainerRef = useRef(null);
 
-  // Save to LocalStorage
+  useEffect(() => {
+    localStorage.setItem('planner_title', plannerTitle);
+  }, [plannerTitle]);
+
+  useEffect(() => {
+    localStorage.setItem('planner_start_date', startDate);
+  }, [startDate]);
+
+  useEffect(() => {
+    localStorage.setItem('planner_end_date', endDate);
+  }, [endDate]);
+
   useEffect(() => {
     localStorage.setItem('planner_activities', JSON.stringify(activities));
   }, [activities]);
@@ -326,6 +377,7 @@ export default function App() {
   }, [categories]);
 
   useEffect(() => {
+    localStorage.setItem('planner_dark', darkMode);
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -381,15 +433,23 @@ export default function App() {
     e.stopPropagation();
 
     const hourHeight = viewType === 'dayView' ? DAY_VIEW_HOUR_HEIGHT : MAIN_HOUR_HEIGHT;
+    
+    let gridBounds = null;
+    if (viewType === 'main' && gridContainerRef.current) {
+      gridBounds = gridContainerRef.current.getBoundingClientRect();
+    }
 
     setDragState({
       id: activity.id,
       type, // 'move', 'resize-top', 'resize-bottom'
       startY: e.clientY,
+      startX: e.clientX,
       initialStart: timeToMinutes(activity.startTime),
       initialEnd: timeToMinutes(activity.endTime),
-      date: activity.date,
+      initialDate: activity.date,
       hourHeight,
+      viewType,
+      gridBounds,
     });
   };
 
@@ -399,8 +459,23 @@ export default function App() {
     const handleMouseMove = (e) => {
       const deltaY = e.clientY - dragState.startY;
       const hourH = dragState.hourHeight || MAIN_HOUR_HEIGHT;
-      // Convert pixels to 5-minute rounded intervals
+      // 5-minute grid snapping calculations
       const minutesDelta = Math.round((deltaY / hourH) * 60 / 5) * 5;
+
+      // Handle Cross-Day Dragging in Main Grid
+      let newDate = dragState.initialDate;
+      if (dragState.type === 'move' && dragState.viewType === 'main' && dragState.gridBounds && scheduleDates.length > 0) {
+        const timeColWidth = 100; // Left axis width
+        const relativeX = e.clientX - (dragState.gridBounds.left + timeColWidth);
+        const dayColWidth = (dragState.gridBounds.width - timeColWidth) / scheduleDates.length;
+        
+        let colIndex = Math.floor(relativeX / dayColWidth);
+        colIndex = Math.max(0, Math.min(scheduleDates.length - 1, colIndex));
+        
+        if (scheduleDates[colIndex]) {
+          newDate = scheduleDates[colIndex];
+        }
+      }
 
       setActivities((prev) =>
         prev.map((act) => {
@@ -430,6 +505,7 @@ export default function App() {
 
           return {
             ...act,
+            date: newDate,
             startTime: minutesToTime(newStart),
             endTime: minutesToTime(newEnd),
           };
@@ -448,7 +524,7 @@ export default function App() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState]);
+  }, [dragState, scheduleDates]);
 
   const handleGridCellClick = (dateStr, clickedMinute) => {
     if (isBatchMode) return;
@@ -468,10 +544,16 @@ export default function App() {
   };
 
   const exportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ activities, categories }, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+      title: plannerTitle,
+      startDate,
+      endDate,
+      activities,
+      categories
+    }, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `schedule_planner_export_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `${plannerTitle.toLowerCase().replace(/\s+/g, '_')}_export.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -489,7 +571,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `schedule_planner_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `${plannerTitle.toLowerCase().replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -502,6 +584,9 @@ export default function App() {
       fileReader.onload = (e) => {
         try {
           const parsed = JSON.parse(e.target.result);
+          if (parsed.title) setPlannerTitle(parsed.title);
+          if (parsed.startDate) setStartDate(parsed.startDate);
+          if (parsed.endDate) setEndDate(parsed.endDate);
           if (parsed.activities) setActivities(parsed.activities);
           if (parsed.categories) setCategories(parsed.categories);
         } catch (err) {
@@ -543,22 +628,53 @@ export default function App() {
       
       {/* HEADER BAR */}
       <header className={`border-b sticky top-0 z-30 backdrop-blur-md ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           
-          {/* Logo & Title */}
+          {/* Editable Logo & Schedule Title */}
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
+            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
               <Calendar className="w-6 h-6" />
             </div>
-            <div>
-              <h1 className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2">
-                2-Week Schedule Planner
-                <span className="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Jan 20-27
+
+            <div className="flex flex-col">
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={plannerTitle}
+                    onChange={(e) => setPlannerTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') setIsEditingTitle(false);
+                    }}
+                    autoFocus
+                    className={`font-bold text-lg px-2 py-0.5 rounded border outline-none ${
+                      darkMode ? 'bg-slate-800 border-indigo-500 text-white' : 'bg-slate-100 border-indigo-500 text-slate-900'
+                    }`}
+                  />
+                  <button
+                    onClick={() => setIsEditingTitle(false)}
+                    className="p-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <h1
+                  onClick={() => setIsEditingTitle(true)}
+                  className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2 cursor-pointer group"
+                  title="Click to edit title inline"
+                >
+                  <span>{plannerTitle}</span>
+                  <Pencil className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </h1>
+              )}
+
+              {/* Date Range Badge */}
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                  {formatDateLabel(startDate).formattedDate} – {formatDateLabel(endDate).formattedDate}
                 </span>
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Click any day header to expand into Single Day View
+                <span>• {scheduleDates.length} Days</span>
               </p>
             </div>
           </div>
@@ -571,7 +687,7 @@ export default function App() {
               placeholder="Search activities or notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border outline-none transition-all ${
+              className={`w-full pl-9 pr-8 py-1.5 text-sm rounded-lg border outline-none transition-all ${
                 darkMode
                   ? 'bg-slate-800 border-slate-700 focus:border-indigo-500 text-slate-100 placeholder-slate-500'
                   : 'bg-slate-100 border-slate-200 focus:border-indigo-500 text-slate-800 placeholder-slate-400'
@@ -587,9 +703,23 @@ export default function App() {
             )}
           </div>
 
-          {/* Action Tools & Toggles */}
+          {/* Action Tools & Settings */}
           <div className="flex items-center gap-2">
             
+            {/* Range & Settings Modal Toggle */}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 ${
+                darkMode
+                  ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+              title="Edit Schedule Title and Date Range"
+            >
+              <Sliders className="w-4 h-4 text-indigo-500" />
+              Date Range & Settings
+            </button>
+
             {/* Multi-Select / Batch Mode Button */}
             <button
               onClick={() => {
@@ -605,10 +735,10 @@ export default function App() {
               }`}
             >
               <CheckSquare className="w-4 h-4" />
-              {isBatchMode ? 'Cancel Selection' : 'Batch Delete'}
+              {isBatchMode ? 'Cancel Selection' : 'Select & Delete'}
             </button>
 
-            {/* Category Manager */}
+            {/* Category Manager Button */}
             <button
               onClick={() => setShowCategoryManager(true)}
               className={`p-2 rounded-lg border transition-all ${
@@ -618,7 +748,7 @@ export default function App() {
               }`}
               title="Manage Categories & Colors"
             >
-              <Settings className="w-4 h-4" />
+              <Tag className="w-4 h-4" />
             </button>
 
             {/* Analytics Modal Toggle */}
@@ -634,7 +764,7 @@ export default function App() {
               <BarChart3 className="w-4 h-4" />
             </button>
 
-            {/* Export & Import */}
+            {/* Export & Import Group */}
             <div className="flex items-center border rounded-lg overflow-hidden dark:border-slate-700 border-slate-200">
               <button
                 onClick={exportJSON}
@@ -652,14 +782,14 @@ export default function App() {
               </button>
               <label
                 className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200 cursor-pointer"
-                title="Import JSON"
+                title="Import JSON Backup"
               >
                 <Upload className="w-4 h-4" />
                 <input type="file" accept=".json" onChange={importJSON} className="hidden" />
               </label>
             </div>
 
-            {/* Light / Dark Mode Toggle */}
+            {/* Dark Mode Toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
               className={`p-2 rounded-lg border transition-all ${
@@ -678,7 +808,7 @@ export default function App() {
                 setEditingActivity({
                   id: 'act-' + Date.now(),
                   title: '',
-                  date: SCHEDULE_DATES[0],
+                  date: scheduleDates[0] || '2026-01-20',
                   startTime: '09:00',
                   endTime: '10:00',
                   categoryId: categories[0]?.id || '',
@@ -686,7 +816,7 @@ export default function App() {
                   isNew: true,
                 })
               }
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
               New Activity
@@ -694,7 +824,7 @@ export default function App() {
           </div>
         </div>
 
-        {}
+        {/* SUB-HEADER: CATEGORY FILTERS & BATCH STATUS */}
         <div className={`px-4 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100/70 border-slate-200'}`}>
           
           {/* Category Filters */}
@@ -741,7 +871,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Batch Mode Top Toolbar Context */}
+          {/* Batch Mode Bar Controls */}
           {isBatchMode && (
             <div className="flex items-center gap-2">
               <span className="font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
@@ -769,18 +899,22 @@ export default function App() {
 
       {}
       <main className="flex-1 overflow-x-auto p-4 max-w-[1600px] w-full mx-auto">
-        <div className={`min-w-[1100px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`min-w-[1000px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           
-          {/* STICKY DATE HEADER (8 DAYS) */}
-          <div className={`grid grid-cols-9 sticky top-[108px] z-20 border-b ${darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'}`}>
-            
+          {/* DYNAMIC DATE HEADERS */}
+          <div
+            className={`grid sticky top-[108px] z-20 border-b ${darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'}`}
+            style={{
+              gridTemplateColumns: `100px repeat(${scheduleDates.length}, minmax(120px, 1fr))`
+            }}
+          >
             {/* Time Column Header */}
             <div className="p-3 border-r dark:border-slate-800 border-slate-200 font-semibold text-xs text-center flex items-center justify-center gap-1 text-slate-400">
               <Clock className="w-3.5 h-3.5" /> Time
             </div>
 
-            {/* Days Columns Headers (Clicking opens expanded single day view) */}
-            {SCHEDULE_DATES.map((dateStr) => {
+            {/* Dynamic Days Column Headers */}
+            {scheduleDates.map((dateStr) => {
               const { dayName, formattedDate } = formatDateLabel(dateStr);
               const dayCount = filteredActivities.filter((a) => a.date === dateStr).length;
 
@@ -809,8 +943,14 @@ export default function App() {
           </div>
 
           {/* TIMETABLE GRID BODY */}
-          <div className="grid grid-cols-9 relative" style={{ height: `${MAIN_GRID_HEIGHT}px` }}>
-            
+          <div
+            ref={gridContainerRef}
+            className="grid relative"
+            style={{
+              height: `${MAIN_GRID_HEIGHT}px`,
+              gridTemplateColumns: `100px repeat(${scheduleDates.length}, minmax(120px, 1fr))`
+            }}
+          >
             {/* TIME SLOTS AXIS (LEFT COLUMN) */}
             <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${darkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
               {Array.from({ length: 12 }).map((_, idx) => {
@@ -827,8 +967,8 @@ export default function App() {
               })}
             </div>
 
-            {/* DAY COLUMNS & ACTIVITIES */}
-            {SCHEDULE_DATES.map((dateStr) => {
+            {/* DYNAMIC DAY COLUMNS & ACTIVITIES */}
+            {scheduleDates.map((dateStr) => {
               const dayActivities = filteredActivities.filter((a) => a.date === dateStr);
               const layoutItems = calculateOverlaps(dayActivities);
 
@@ -843,8 +983,7 @@ export default function App() {
                     handleGridCellClick(dateStr, clickedMinute);
                   }}
                 >
-                  {}
-                  {/* Hourly Horizontal Background Lines */}
+                  {/* Hourly Background Lines */}
                   {Array.from({ length: 12 }).map((_, idx) => (
                     <div
                       key={idx}
@@ -853,7 +992,7 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Half-Hour Guidelines */}
+                  {/* Half-Hour Dash Guidelines */}
                   {Array.from({ length: 12 }).map((_, idx) => (
                     <div
                       key={`sub-${idx}`}
@@ -862,7 +1001,7 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Activity Blocks */}
+                  {/* Activity Block Cards */}
                   {layoutItems.map((act) => {
                     const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
                     const startMins = timeToMinutes(act.startTime);
@@ -889,14 +1028,14 @@ export default function App() {
                         }}
                         style={{
                           top: `${topPx}px`,
-                          height: `${Math.max(24, heightPx)}px`,
+                          height: `${Math.max(26, heightPx)}px`,
                           left: `${leftPercent}%`,
                           width: `${widthPercent}%`,
                           backgroundColor: `${category.color}22`,
                           borderColor: category.color,
                         }}
                         className={`absolute rounded-lg border-l-4 border-y border-r p-1.5 text-xs shadow-sm cursor-pointer transition-all duration-75 overflow-hidden flex flex-col justify-between group/card ${
-                          isSelected ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/20' : 'hover:shadow-md hover:z-10'
+                          isSelected ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/30' : 'hover:shadow-md hover:z-10'
                         } ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}
                       >
                         {/* Top Resize Handle */}
@@ -907,7 +1046,7 @@ export default function App() {
                           />
                         )}
 
-                        {/* Top Header Row of Card */}
+                        {/* Top Card Header */}
                         <div className="flex items-start justify-between gap-1 pointer-events-none">
                           <div className="flex items-center gap-1 min-w-0">
                             {isBatchMode && (
@@ -916,7 +1055,7 @@ export default function App() {
                                   e.stopPropagation();
                                   toggleSelectActivity(act.id);
                                 }}
-                                className="pointer-events-auto mr-1"
+                                className="pointer-events-auto mr-0.5"
                               >
                                 {isSelected ? (
                                   <CheckSquare className="w-4 h-4 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
@@ -935,7 +1074,7 @@ export default function App() {
 
                         {/* Middle Content */}
                         <div className="my-0.5 pointer-events-none">
-                          <p className="text-[10px] font-medium opacity-80 flex items-center gap-1">
+                          <p className="text-[10px] font-semibold opacity-80 flex items-center gap-1">
                             {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
                           </p>
                           {heightPx > 45 && act.notes && (
@@ -943,13 +1082,13 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Drag Handle Indicator */}
+                        {/* Drag Handle Overlay */}
                         {!isBatchMode && (
                           <div
                             onMouseDown={(e) => handleMouseDown(e, act, 'move', 'main')}
                             className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 flex items-center justify-center"
                           >
-                            <span className="text-[9px] bg-slate-900/60 text-white px-1.5 py-0.5 rounded shadow backdrop-blur-sm pointer-events-none">
+                            <span className="text-[9px] font-bold bg-slate-900/70 text-white px-1.5 py-0.5 rounded shadow backdrop-blur-sm pointer-events-none">
                               Drag 5m
                             </span>
                           </div>
@@ -973,14 +1112,13 @@ export default function App() {
       </main>
 
       {}
-      {/* EXPANDED SINGLE DAY VIEW POP-UP MODAL */}
       {selectedDayView && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-hidden">
-          <div className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden animate-fadeIn ${
+          <div className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
             darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
           }`}>
             
-            {/* Modal Header Bar */}
+            {/* Day Modal Header Bar */}
             <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 ${
               darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50 border-slate-200'
             }`}>
@@ -988,12 +1126,12 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const currentIndex = SCHEDULE_DATES.indexOf(selectedDayView);
+                    const currentIndex = scheduleDates.indexOf(selectedDayView);
                     if (currentIndex > 0) {
-                      setSelectedDayView(SCHEDULE_DATES[currentIndex - 1]);
+                      setSelectedDayView(scheduleDates[currentIndex - 1]);
                     }
                   }}
-                  disabled={SCHEDULE_DATES.indexOf(selectedDayView) === 0}
+                  disabled={scheduleDates.indexOf(selectedDayView) === 0}
                   className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
                   title="Previous Day"
                 >
@@ -1014,12 +1152,12 @@ export default function App() {
 
                 <button
                   onClick={() => {
-                    const currentIndex = SCHEDULE_DATES.indexOf(selectedDayView);
-                    if (currentIndex < SCHEDULE_DATES.length - 1) {
-                      setSelectedDayView(SCHEDULE_DATES[currentIndex + 1]);
+                    const currentIndex = scheduleDates.indexOf(selectedDayView);
+                    if (currentIndex < scheduleDates.length - 1) {
+                      setSelectedDayView(scheduleDates[currentIndex + 1]);
                     }
                   }}
-                  disabled={SCHEDULE_DATES.indexOf(selectedDayView) === SCHEDULE_DATES.length - 1}
+                  disabled={scheduleDates.indexOf(selectedDayView) === scheduleDates.length - 1}
                   className="p-1.5 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
                   title="Next Day"
                 >
@@ -1027,7 +1165,7 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Action Tools & Close Button */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() =>
@@ -1050,20 +1188,19 @@ export default function App() {
                 <button
                   onClick={() => setSelectedDayView(null)}
                   className="px-3.5 py-1.5 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs rounded-xl hover:opacity-90 transition-all flex items-center gap-1.5 shadow"
-                  title="Return to Full Schedule View"
+                  title="Return to Full Schedule Grid"
                 >
                   <Minimize2 className="w-4 h-4" /> Close Day View
                 </button>
               </div>
             </div>
 
-            {}
-            {/* Expanded Day View Timetable Area */}
+            {/* Expanded Day View Area */}
             <div className="flex-1 overflow-y-auto relative p-4">
               <div className="max-w-3xl mx-auto rounded-xl border dark:border-slate-800 border-slate-200 overflow-hidden relative" style={{ height: `${DAY_VIEW_GRID_HEIGHT}px` }}>
                 <div className="grid grid-cols-[100px_1fr] h-full relative">
                   
-                  {/* Left Expanded Time Column */}
+                  {/* Time Column */}
                   <div className={`border-r dark:border-slate-800 border-slate-200 select-none ${
                     darkMode ? 'bg-slate-900/60' : 'bg-slate-50'
                   }`}>
@@ -1081,7 +1218,7 @@ export default function App() {
                     })}
                   </div>
 
-                  {/* Main Grid Interactive Single Column */}
+                  {/* Interactive Column Grid */}
                   <div
                     className="relative transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 cursor-pointer"
                     onClick={(e) => {
@@ -1091,7 +1228,7 @@ export default function App() {
                       handleGridCellClick(selectedDayView, clickedMinute);
                     }}
                   >
-                    {/* Hourly Guidelines */}
+                    {/* Hourly Lines */}
                     {Array.from({ length: 12 }).map((_, idx) => (
                       <div
                         key={idx}
@@ -1100,7 +1237,7 @@ export default function App() {
                       />
                     ))}
 
-                    {/* 15-Minute Sub-Guidelines */}
+                    {/* 15-Min Lines */}
                     {Array.from({ length: 48 }).map((_, idx) => (
                       <div
                         key={`sub15-${idx}`}
@@ -1109,7 +1246,7 @@ export default function App() {
                       />
                     ))}
 
-                    {/* Day Activities in Expanded View */}
+                    {/* Day Activities */}
                     {calculateOverlaps(filteredActivities.filter((a) => a.date === selectedDayView)).map((act) => {
                       const category = categoryMap[act.categoryId] || { color: '#64748B', name: 'Other' };
                       const startMins = timeToMinutes(act.startTime);
@@ -1143,7 +1280,7 @@ export default function App() {
                             borderColor: category.color,
                           }}
                           className={`absolute rounded-xl border-l-8 border-y border-r p-3 text-xs shadow-md cursor-pointer transition-all overflow-hidden flex flex-col justify-between group/daycard ${
-                            isSelected ? 'ring-4 ring-rose-500 bg-rose-500/20' : 'hover:shadow-lg hover:z-10'
+                            isSelected ? 'ring-4 ring-rose-500 bg-rose-500/30' : 'hover:shadow-lg hover:z-10'
                           } ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}
                         >
                           {/* Top Resize Handle */}
@@ -1223,9 +1360,114 @@ export default function App() {
       )}
 
       {}
-      {/* BATCH FLOATING BAR */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-indigo-500" />
+                Schedule Settings & Range
+              </h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Schedule Planner Title</label>
+                <input
+                  type="text"
+                  value={plannerTitle}
+                  onChange={(e) => setPlannerTitle(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                    darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Quick Range Presets */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Quick Range Presets</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setStartDate('2026-01-20');
+                      setEndDate('2026-01-27');
+                    }}
+                    className="px-2.5 py-1 rounded-lg border font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                  >
+                    Jan 20 – Jan 27, 2026
+                  </button>                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const yyyy = today.getFullYear();
+                      const mm = String(today.getMonth() + 1).padStart(2, '0');
+                      const dd = String(today.getDate()).padStart(2, '0');
+                      const start = `${yyyy}-${mm}-${dd}`;
+
+                      const nextWeek = new Date(today);
+                      nextWeek.setDate(nextWeek.getDate() + 6);
+                      const nyyyy = nextWeek.getFullYear();
+                      const nmm = String(nextWeek.getMonth() + 1).padStart(2, '0');
+                      const ndd = String(nextWeek.getDate()).padStart(2, '0');
+                      const end = `${nyyyy}-${nmm}-${ndd}`;
+
+                      setStartDate(start);
+                      setEndDate(end);
+                    }}
+                    className="px-2.5 py-1 rounded-lg border font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                  >
+                    Next 7 Days
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t dark:border-slate-800 border-slate-200 flex justify-end">
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow"
+                >
+                  Save & Apply Range
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {}
       {isBatchMode && selectedActivityIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4 animate-bounce">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
             <span className="font-bold text-sm">
@@ -1261,7 +1503,6 @@ export default function App() {
               <span className="font-bold text-rose-600 dark:text-rose-400">{selectedActivityIds.length}</span> selected activity items?
             </p>
 
-            {/* Selected Items Summary Preview */}
             <div className={`p-3 rounded-xl max-h-36 overflow-y-auto mb-6 text-xs border ${darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
               <p className="font-bold mb-2 text-slate-400 uppercase text-[10px] tracking-wider">Items to be removed:</p>
               <ul className="space-y-1">
@@ -1298,7 +1539,6 @@ export default function App() {
       )}
 
       {}
-      {/* EDIT / CREATE ACTIVITY MODAL */}
       {editingActivity && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1356,7 +1596,7 @@ export default function App() {
                       darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                     }`}
                   >
-                    {SCHEDULE_DATES.map((d) => {
+                    {scheduleDates.map((d) => {
                       const { dayName, formattedDate } = formatDateLabel(d);
                       return (
                         <option key={d} value={d}>
@@ -1420,12 +1660,12 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Details</label>
+                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Agenda</label>
                 <textarea
                   rows={3}
                   value={editingActivity.notes || ''}
                   onChange={(e) => setEditingActivity({ ...editingActivity, notes: e.target.value })}
-                  placeholder="Add details, links or agenda notes..."
+                  placeholder="Add details, links or action items..."
                   className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
                     darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                   }`}
@@ -1470,14 +1710,13 @@ export default function App() {
       )}
 
       {}
-      {/* CATEGORY MANAGER MODAL */}
       {showCategoryManager && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={`max-w-lg w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <Tag className="w-4 h-4 text-indigo-500" />
-                Category & Color Manager
+                Category & Color Tag Manager
               </h3>
               <button
                 onClick={() => setShowCategoryManager(false)}
@@ -1563,7 +1802,6 @@ export default function App() {
       )}
 
       {}
-      {/* ANALYTICS DASHBOARD MODAL */}
       {showAnalytics && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={`max-w-xl w-full rounded-2xl p-6 shadow-2xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1581,7 +1819,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-              Total scheduled hours across all 8 days (Jan 20 – Jan 27, 2026).
+              Total scheduled hours across all active days in range ({formatDateLabel(startDate).formattedDate} – {formatDateLabel(endDate).formattedDate}).
             </p>
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
@@ -1615,7 +1853,7 @@ export default function App() {
                 onClick={() => setShowAnalytics(false)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
               >
-                Close
+                Close Analytics
               </button>
             </div>
           </div>
