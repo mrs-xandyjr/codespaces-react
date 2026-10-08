@@ -1,50 +1,49 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Calendar, Clock, Plus, Trash2, Edit3, Share2, Cloud, CloudOff, Settings,
+  Calendar, Clock, Plus, Trash2, Edit3, Share2, Settings,
   Sun, Moon, Tag, Filter, CheckSquare, Square, Maximize2, Download, Upload,
-  X, Check, Copy, ExternalLink, BarChart2, RefreshCw, AlertCircle, Eye, Save,
-  Grid, ChevronLeft, ChevronRight, CheckCircle2, Layers, AlertTriangle, FileText
+  X, Check, Copy, BarChart2, AlertCircle, Eye, CheckCircle2,
+  Layers, AlertTriangle, FileText
 } from 'lucide-react';
 
+// Requested Pastel Tag Colors for Grade 7 to 12
 const DEFAULT_CATEGORIES = [
-  { id: 'cat-g7', name: 'Grade 7', color: '#3B82F6' },       // Blue
-  { id: 'cat-g8', name: 'Grade 8', color: '#10B981' },    // Green
-  { id: 'cat-g9', name: 'Grade 9', color: '#F59E0B' },     // Amber
-  { id: 'cat-g10', name: 'Grade 10', color: '#8B5CF6' },   // Purple
-  { id: 'cat-syp', name: 'SYP', color: '#EC4899' }      // Pink
+  { id: 'cat-g7', name: 'Grade 7', color: '#86efac' },   // Pastel Green
+  { id: 'cat-g8', name: 'Grade 8', color: '#fef08a' },   // Pastel Yellow
+  { id: 'cat-g9', name: 'Grade 9', color: '#fca5a5' },   // Pastel Red
+  { id: 'cat-g10', name: 'Grade 10', color: '#93c5fd' }, // Pastel Blue
+  { id: 'cat-g11', name: 'Grade 11', color: '#f472b6' }, // Pastel Pink
+  { id: 'cat-g12', name: 'Grade 12', color: '#fdba74' }  // Pastel Orange
 ];
 
 const DEFAULT_SCHEDULE_META = {
-  title: 'YMSAT 2027 Schedule',
+  title: 'YMSAT Schedule',
   startDate: '2027-01-20',
   endDate: '2027-01-27',
   startTime: '06:00',
   endTime: '18:00'
 };
 
+// Single default activity block: Opening Program with ALL tags selected
 const DEFAULT_ACTIVITIES = [
   {
-    id: 'act-1',
-    title: 'YMSAT Preps',
+    id: 'act-opening-program',
+    title: 'Opening Program',
     date: '2027-01-20',
-    startTime: '13:30',
-    endTime: '16:30',
-    categoryIds: ['cat-g7', 'cat-g8', 'cat-g9', 'cat-g10'],
-    notes: 'Not required.'
-  },
+    startTime: '07:30',
+    endTime: '08:30',
+    categoryIds: ['cat-g7', 'cat-g8', 'cat-g9', 'cat-g10', 'cat-g11', 'cat-g12'],
+    notes: 'Welcome assembly and opening ceremonies for YMSAT.'
+  }
 ];
 
-// Method 2: Encoding schedule into URL safe string
 const encodeScheduleToURL = (scheduleMeta, categories, activities) => {
   try {
     const payload = {
       meta: scheduleMeta,
       cats: categories,
       acts: activities,
-      v: 1
+      v: 2
     };
     const jsonStr = JSON.stringify(payload);
     const encoded = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
@@ -71,7 +70,7 @@ const decodeScheduleFromURL = (encodedStr) => {
 
 const getCategoryStyle = (categoryIds, categories) => {
   if (!categoryIds || categoryIds.length === 0) {
-    return { background: '#6B7280', color: '#FFFFFF' };
+    return { background: '#e2e8f0', color: '#0f172a' };
   }
 
   const matchedColors = categoryIds
@@ -79,18 +78,18 @@ const getCategoryStyle = (categoryIds, categories) => {
     .filter(Boolean);
 
   if (matchedColors.length === 0) {
-    return { background: '#6B7280', color: '#FFFFFF' };
+    return { background: '#e2e8f0', color: '#0f172a' };
   }
 
   if (matchedColors.length === 1) {
     return {
       background: matchedColors[0],
-      color: '#FFFFFF'
+      color: '#0f172a' // Dark slate text for high contrast on pastel backgrounds
     };
   }
 
-  // Multi-tag striped gradient generator using repeating linear gradient
-  const stripeWidth = 24; // px per color stripe
+  // Multi-tag repeating linear gradient stripe pattern
+  const stripeWidth = 18;
   let gradientStops = [];
   matchedColors.forEach((color, index) => {
     const start = index * stripeWidth;
@@ -104,7 +103,7 @@ const getCategoryStyle = (categoryIds, categories) => {
   return {
     backgroundImage: gradientCss,
     backgroundSize: `${totalWidth * 1.414}px ${totalWidth * 1.414}px`,
-    color: '#FFFFFF'
+    color: '#0f172a'
   };
 };
 
@@ -144,57 +143,47 @@ const getDatesInRange = (startDateStr, endDateStr) => {
 };
 
 export default function App() {
-  // --- Core Schedule States ---
-  const [scheduleMeta, setScheduleMeta] = useState(DEFAULT_SCHEDULE_META);
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
-  const [activities, setActivities] = useState(DEFAULT_ACTIVITIES);
-
-  // --- Theme State ---
-  const [darkMode, setDarkMode] = useState(false);
-
-  // --- Shared Link (Method 2) State ---
-  const [isViewingSharedUrl, setIsViewingSharedUrl] = useState(false);
-  const [sharedSourceData, setSharedSourceData] = useState(null);
-
-  // --- Cloud Sync (Method 3) Firebase Config & Sync State ---
-  const [userFirebaseConfig, setUserFirebaseConfig] = useState(() => {
-    try {
-      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        return typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
-      }
-      const savedConfig = localStorage.getItem('flexi_firebase_config');
-      return savedConfig ? JSON.parse(savedConfig) : null;
-    } catch (e) {
-      return null;
-    }
+  // Local storage initialization logic
+  const [scheduleMeta, setScheduleMeta] = useState(() => {
+    const saved = localStorage.getItem('ymsat_schedule_meta');
+    return saved ? JSON.parse(saved) : DEFAULT_SCHEDULE_META;
   });
 
-  const [cloudSyncStatus, setCloudSyncStatus] = useState('local'); // 'connected', 'syncing', 'error', 'local'
-  const [cloudUserId, setCloudUserId] = useState(null);
-  const [firebaseInstances, setFirebaseInstances] = useState(null);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('ymsat_categories');
+    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+  });
 
-  // --- UI Interactive States ---
+  const [activities, setActivities] = useState(() => {
+    const saved = localStorage.getItem('ymsat_activities');
+    return saved ? JSON.parse(saved) : DEFAULT_ACTIVITIES;
+  });
+
+  const [darkMode, setDarkMode] = useState(false);
+  const [isViewingSharedUrl, setIsViewingSharedUrl] = useState(false);
+
+  // UI Interactive States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
   
-  // --- Active Modals ---
-  const [activeModal, setActiveModal] = useState(null); // 'activity', 'categories', 'share', 'cloud', 'analytics', 'dayView', 'batchDelete', 'settings', 'import'
+  // Modals
+  const [activeModal, setActiveModal] = useState(null); // 'activity', 'categories', 'share', 'analytics', 'dayView', 'batchDelete', 'settings'
   const [editingActivity, setEditingActivity] = useState(null);
   const [selectedDayForView, setSelectedDayForView] = useState(null);
 
-  // --- Form Input States ---
+  // Form States
   const [activityForm, setActivityForm] = useState({
     title: '',
-    date: '2026-01-20',
-    startTime: '09:00',
-    endTime: '10:00',
-    categoryIds: [],
+    date: '2027-01-20',
+    startTime: '07:30',
+    endTime: '08:30',
+    categoryIds: ['cat-g7', 'cat-g8', 'cat-g9', 'cat-g10', 'cat-g11', 'cat-g12'],
     notes: ''
   });
 
-  const [firebaseConfigText, setFirebaseConfigText] = useState('');
   const [toastMessage, setToastMessage] = useState(null);
+  const [generatedShareUrl, setGeneratedShareUrl] = useState('');
 
   const showToast = (text, type = 'info') => {
     setToastMessage({ text, type });
@@ -204,143 +193,44 @@ export default function App() {
   };
 
   useEffect(() => {
-    const checkUrlHash = () => {
+    if (!isViewingSharedUrl) {
+      localStorage.setItem('ymsat_schedule_meta', JSON.stringify(scheduleMeta));
+      localStorage.setItem('ymsat_categories', JSON.stringify(categories));
+      localStorage.setItem('ymsat_activities', JSON.stringify(activities));
+    }
+  }, [scheduleMeta, categories, activities, isViewingSharedUrl]);
+
+  useEffect(() => {
+    const checkUrlForSharedData = () => {
       const hash = window.location.hash;
+      const search = window.location.search;
+      let encodedData = null;
+
       if (hash && hash.includes('share=')) {
-        const encodedData = hash.split('share=')[1];
+        encodedData = hash.split('share=')[1];
+      } else if (search && search.includes('data=')) {
+        const params = new URLSearchParams(search);
+        encodedData = params.get('data');
+      }
+
+      if (encodedData) {
         const decoded = decodeScheduleFromURL(encodedData);
         if (decoded && decoded.meta && decoded.acts) {
           setIsViewingSharedUrl(true);
-          setSharedSourceData(decoded);
           setScheduleMeta(decoded.meta);
           setCategories(decoded.cats || DEFAULT_CATEGORIES);
           setActivities(decoded.acts || []);
-          showToast('Loaded shared schedule from link!', 'success');
+          showToast('Loaded schedule from shared URL link!', 'success');
         } else {
-          showToast('Invalid shared link data.', 'error');
+          showToast('Invalid or corrupted share link.', 'error');
         }
       }
     };
 
-    checkUrlHash();
-    window.addEventListener('hashchange', checkUrlHash);
-    return () => window.removeEventListener('hashchange', checkUrlHash);
+    checkUrlForSharedData();
+    window.addEventListener('hashchange', checkUrlForSharedData);
+    return () => window.removeEventListener('hashchange', checkUrlForSharedData);
   }, []);
-
-  useEffect(() => {
-    if (!userFirebaseConfig || !userFirebaseConfig.apiKey) {
-      setCloudSyncStatus('local');
-      return;
-    }
-
-    try {
-      setCloudSyncStatus('syncing');
-      const existingApps = getApps();
-      const app = existingApps.length > 0 ? existingApps[0] : initializeApp(userFirebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-
-      setFirebaseInstances({ app, auth, db });
-
-      // Authenticate
-      const handleAuth = async () => {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      };
-
-      handleAuth().catch(err => console.warn('Firebase Auth warning:', err));
-
-      const unsubAuth = onAuthStateChanged(auth, (usr) => {
-        if (usr) {
-          setCloudUserId(usr.uid);
-          
-          // Setup real-time listener for schedule doc
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'shared-flexi-schedule';
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedule_data');
-
-          const unsubSnapshot = onSnapshot(docRef, 
-            (docSnap) => {
-              if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (data.meta) setScheduleMeta(data.meta);
-                if (data.categories) setCategories(data.categories);
-                if (data.activities) setActivities(data.activities);
-              }
-              setCloudSyncStatus('connected');
-            },
-            (err) => {
-              console.error('Firestore listener error:', err);
-              setCloudSyncStatus('error');
-            }
-          );
-
-          return () => unsubSnapshot();
-        } else {
-          setCloudSyncStatus('local');
-        }
-      });
-
-      return () => unsubAuth();
-    } catch (err) {
-      console.error('Firebase initialization error:', err);
-      setCloudSyncStatus('error');
-    }
-  }, [userFirebaseConfig]);
-
-  const saveToCloud = async (newMeta, newCats, newActs) => {
-    if (!firebaseInstances || !firebaseInstances.db || cloudSyncStatus === 'local') return;
-
-    try {
-      setCloudSyncStatus('syncing');
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'shared-flexi-schedule';
-      const docRef = doc(firebaseInstances.db, 'artifacts', appId, 'public', 'data', 'schedule_data');
-
-      await setDoc(docRef, {
-        meta: newMeta || scheduleMeta,
-        categories: newCats || categories,
-        activities: newActs || activities,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      setCloudSyncStatus('connected');
-    } catch (err) {
-      console.error('Cloud save failed:', err);
-      setCloudSyncStatus('error');
-    }
-  };
-
-  const updateActivitiesState = (updater) => {
-    setActivities(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      if (!isViewingSharedUrl) {
-        saveToCloud(scheduleMeta, categories, next);
-      }
-      return next;
-    });
-  };
-
-  const updateScheduleMetaState = (updater) => {
-    setScheduleMeta(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      if (!isViewingSharedUrl) {
-        saveToCloud(next, categories, activities);
-      }
-      return next;
-    });
-  };
-
-  const updateCategoriesState = (updater) => {
-    setCategories(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      if (!isViewingSharedUrl) {
-        saveToCloud(scheduleMeta, next, activities);
-      }
-      return next;
-    });
-  };
 
   const filteredActivities = useMemo(() => {
     if (!searchQuery.trim()) return activities;
@@ -377,9 +267,9 @@ export default function App() {
     setActivityForm({
       title: '',
       date: defaultDate,
-      startTime: '09:00',
-      endTime: '10:00',
-      categoryIds: [categories[0]?.id || 'cat-work'],
+      startTime: '08:00',
+      endTime: '09:00',
+      categoryIds: categories.map(c => c.id), // All grades selected by default
       notes: ''
     });
     setActiveModal('activity');
@@ -410,7 +300,7 @@ export default function App() {
     }
 
     if (editingActivity) {
-      updateActivitiesState(prev => prev.map(a => a.id === editingActivity.id ? {
+      setActivities(prev => prev.map(a => a.id === editingActivity.id ? {
         ...a,
         title: activityForm.title,
         date: activityForm.date,
@@ -430,14 +320,14 @@ export default function App() {
         categoryIds: activityForm.categoryIds,
         notes: activityForm.notes
       };
-      updateActivitiesState(prev => [...prev, newAct]);
+      setActivities(prev => [...prev, newAct]);
       showToast('Activity created successfully!', 'success');
     }
     setActiveModal(null);
   };
 
   const handleDeleteSingleActivity = (id) => {
-    updateActivitiesState(prev => prev.filter(a => a.id !== id));
+    setActivities(prev => prev.filter(a => a.id !== id));
     showToast('Activity removed', 'info');
   };
 
@@ -456,13 +346,11 @@ export default function App() {
   };
 
   const handleConfirmBatchDelete = () => {
-    updateActivitiesState(prev => prev.filter(a => !selectedActivityIds.includes(a.id)));
+    setActivities(prev => prev.filter(a => !selectedActivityIds.includes(a.id)));
     showToast(`Deleted ${selectedActivityIds.length} activities`, 'success');
     setSelectedActivityIds([]);
     setActiveModal(null);
   };
-
-  const [generatedShareUrl, setGeneratedShareUrl] = useState('');
 
   const handleGenerateShareLink = () => {
     const encoded = encodeScheduleToURL(scheduleMeta, categories, activities);
@@ -480,40 +368,29 @@ export default function App() {
     showToast('Shareable link copied to clipboard!', 'success');
   };
 
-  const handleImportSharedToCloud = () => {
+  const handleImportSharedToWorkspace = () => {
     setIsViewingSharedUrl(false);
     window.location.hash = '';
-    saveToCloud(scheduleMeta, categories, activities);
-    showToast('Shared schedule imported into your main workspace!', 'success');
+    localStorage.setItem('ymsat_schedule_meta', JSON.stringify(scheduleMeta));
+    localStorage.setItem('ymsat_categories', JSON.stringify(categories));
+    localStorage.setItem('ymsat_activities', JSON.stringify(activities));
+    showToast('Shared schedule saved to your local workspace!', 'success');
   };
 
-  const handleExitSharedMode = () => {
+  const handleResetToDefaults = () => {
+    setScheduleMeta(DEFAULT_SCHEDULE_META);
+    setCategories(DEFAULT_CATEGORIES);
+    setActivities(DEFAULT_ACTIVITIES);
     setIsViewingSharedUrl(false);
     window.location.hash = '';
-    showToast('Exited shared view mode', 'info');
-  };
-
-  const handleSaveFirebaseConfig = (e) => {
-    e.preventDefault();
-    try {
-      let parsed = null;
-      if (firebaseConfigText.trim().startsWith('{')) {
-        parsed = JSON.parse(firebaseConfigText);
-      } else {
-        showToast('Invalid Firebase JSON format', 'error');
-        return;
-      }
-      localStorage.setItem('flexi_firebase_config', JSON.stringify(parsed));
-      setUserFirebaseConfig(parsed);
-      setActiveModal(null);
-      showToast('Firebase configuration updated!', 'success');
-    } catch (err) {
-      showToast('Error parsing Firebase configuration', 'error');
-    }
+    localStorage.removeItem('ymsat_schedule_meta');
+    localStorage.removeItem('ymsat_categories');
+    localStorage.removeItem('ymsat_activities');
+    showToast('Reset schedule to original YMSAT defaults!', 'info');
   };
 
   const [newCatName, setNewCatName] = useState('');
-  const [newCatColor, setNewCatColor] = useState('#3B82F6');
+  const [newCatColor, setNewCatColor] = useState('#86efac');
 
   const handleAddCategory = (e) => {
     e.preventDefault();
@@ -523,29 +400,27 @@ export default function App() {
       name: newCatName.trim(),
       color: newCatColor
     };
-    updateCategoriesState(prev => [...prev, newCat]);
+    setCategories(prev => [...prev, newCat]);
     setNewCatName('');
-    showToast('Category created!', 'success');
+    showToast('Tag created!', 'success');
   };
 
   const handleDeleteCategory = (id) => {
     if (categories.length <= 1) {
-      showToast('At least one category must remain', 'error');
+      showToast('At least one tag must remain', 'error');
       return;
     }
-    updateCategoriesState(prev => prev.filter(c => c.id !== id));
-    // Remove deleted category ID from activities
-    updateActivitiesState(prev => prev.map(a => ({
+    setCategories(prev => prev.filter(c => c.id !== id));
+    setActivities(prev => prev.map(a => ({
       ...a,
       categoryIds: a.categoryIds.filter(cid => cid !== id)
     })));
-    showToast('Category removed', 'info');
+    showToast('Tag removed', 'info');
   };
 
   const analyticsData = useMemo(() => {
     let totalMins = 0;
     const catMins = {};
-
     categories.forEach(c => { catMins[c.id] = 0; });
 
     activities.forEach(act => {
@@ -585,7 +460,7 @@ export default function App() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showToast('Backup JSON exported successfully!', 'success');
+    showToast('Exported backup JSON file!', 'success');
   };
 
   const handleImportJSON = (e) => {
@@ -598,8 +473,7 @@ export default function App() {
         if (parsed.meta) setScheduleMeta(parsed.meta);
         if (parsed.categories) setCategories(parsed.categories);
         if (parsed.activities) setActivities(parsed.activities);
-        saveToCloud(parsed.meta, parsed.categories, parsed.activities);
-        showToast('Schedule imported from backup JSON!', 'success');
+        showToast('Schedule imported successfully from backup JSON!', 'success');
         setActiveModal(null);
       } catch (err) {
         showToast('Invalid JSON file format', 'error');
@@ -611,9 +485,9 @@ export default function App() {
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'} transition-colors duration-200 font-sans pb-12`}>
       
-      {/* Toast Notification Floating Banner */}
+      {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-lg shadow-xl text-white font-medium text-sm transition-all animate-bounce ${
+        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-xl text-white font-medium text-sm transition-all animate-bounce ${
           toastMessage.type === 'error' ? 'bg-red-600' : toastMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
         }`}>
           {toastMessage.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
@@ -621,91 +495,61 @@ export default function App() {
         </div>
       )}
 
-      {/* Shared Link Mode Top Notice Banner (Method 2) */}
+      {/* Method 2 Shared Link Notification Banner */}
       {isViewingSharedUrl && (
-        <div className="bg-amber-500 text-slate-900 px-4 py-2.5 text-sm font-semibold flex flex-wrap items-center justify-between shadow-md">
+        <div className="bg-amber-400 text-slate-900 px-4 py-2.5 text-sm font-semibold flex flex-wrap items-center justify-between shadow-md">
           <div className="flex items-center space-x-2">
             <Eye size={18} className="animate-pulse" />
-            <span>You are viewing a shared link schedule: <strong>"{scheduleMeta.title}"</strong></span>
+            <span>Viewing Shared Schedule Link: <strong>"{scheduleMeta.title}"</strong></span>
           </div>
           <div className="flex items-center space-x-2 mt-2 sm:mt-0">
             <button
-              onClick={handleImportSharedToCloud}
+              onClick={handleImportSharedToWorkspace}
               className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1 rounded-md text-xs transition flex items-center space-x-1"
             >
-              <Cloud size={14} />
-              <span>Import to My Workspace</span>
+              <Download size={14} />
+              <span>Save to My Workspace</span>
             </button>
             <button
-              onClick={handleExitSharedMode}
+              onClick={() => {
+                setIsViewingSharedUrl(false);
+                window.location.hash = '';
+              }}
               className="bg-amber-600 hover:bg-amber-700 text-slate-900 px-3 py-1 rounded-md text-xs transition"
             >
-              Exit View
+              Exit Shared View
             </button>
           </div>
         </div>
       )}
 
       {/* Main Header & Navbar */}
-      <header className={`border-b ${darkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3.5 shadow-sm`}>
+      <header className={`border-b ${darkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3.5 shadow-xs`}>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           
-          {/* Logo & Title & Cloud Indicator */}
+          {/* Logo & Schedule Title */}
           <div className="flex items-center justify-between md:justify-start space-x-4">
-            <div className="flex items-center space-x-2.5">
-              <div className="bg-blue-600 p-2 rounded-xl text-white shadow-md shadow-blue-500/20">
+            <div className="flex items-center space-x-3">
+              <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-md shadow-blue-500/20">
                 <Calendar size={22} />
               </div>
               <div>
                 <h1 className="font-bold text-lg leading-tight">{scheduleMeta.title}</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                   {scheduleMeta.startDate} to {scheduleMeta.endDate}
                 </p>
               </div>
             </div>
-
-            {/* Cloud Sync Status Indicator Pill (Method 3) */}
-            <button
-              onClick={() => setActiveModal('cloud')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
-                cloudSyncStatus === 'connected'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                  : cloudSyncStatus === 'syncing'
-                  ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
-                  : cloudSyncStatus === 'error'
-                  ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800'
-                  : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-              }`}
-              title="Click to configure Cloud Database Sync"
-            >
-              {cloudSyncStatus === 'connected' ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  <Cloud size={14} className="text-emerald-500" />
-                  <span className="hidden sm:inline">Cloud Synced</span>
-                </>
-              ) : cloudSyncStatus === 'syncing' ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin text-blue-500" />
-                  <span className="hidden sm:inline">Syncing...</span>
-                </>
-              ) : (
-                <>
-                  <CloudOff size={14} className="text-slate-400" />
-                  <span className="hidden sm:inline">Local Mode</span>
-                </>
-              )}
-            </button>
           </div>
 
           {/* Search Filter & Control Action Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Search Input Filter */}
+            {/* Search Input */}
             <div className="relative flex-1 sm:w-48 md:w-56">
               <input
                 type="text"
-                placeholder="Filter activities..."
+                placeholder="Search activities..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
@@ -726,7 +570,7 @@ export default function App() {
             {/* Quick Actions */}
             <button
               onClick={() => handleOpenAddModal()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1 shadow-sm transition"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 shadow-xs transition"
             >
               <Plus size={15} />
               <span className="hidden sm:inline">Add Activity</span>
@@ -734,13 +578,13 @@ export default function App() {
 
             <button
               onClick={handleGenerateShareLink}
-              className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
-                darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1.5 transition ${
+                darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-slate-200 bg-white hover:bg-slate-50'
               }`}
-              title="Share via URL Encoded Link (Method 2)"
+              title="Method 2: Share via URL Link"
             >
-              <Share2 size={16} className="text-amber-500" />
-              <span className="hidden lg:inline">Share Link</span>
+              <Share2 size={15} className="text-amber-500" />
+              <span>Share Link</span>
             </button>
 
             <button
@@ -748,7 +592,7 @@ export default function App() {
               className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
                 darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
-              title="Manage Categories & Striped Tag Colors"
+              title="Manage Grade Tags"
             >
               <Tag size={16} className="text-emerald-500" />
               <span className="hidden lg:inline">Tags</span>
@@ -759,7 +603,7 @@ export default function App() {
               className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
                 darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
-              title="Time Analytics Dashboard"
+              title="Time Analytics"
             >
               <BarChart2 size={16} className="text-purple-500" />
               <span className="hidden lg:inline">Stats</span>
@@ -770,7 +614,7 @@ export default function App() {
               className={`p-1.5 rounded-lg border text-xs font-medium transition ${
                 darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
-              title="Date Range & Time Grid Settings"
+              title="Settings & JSON Import/Export"
             >
               <Settings size={16} className="text-slate-500" />
             </button>
@@ -780,7 +624,7 @@ export default function App() {
               className={`p-1.5 rounded-lg border text-xs font-medium transition ${
                 darkMode ? 'border-slate-700 hover:bg-slate-800 text-amber-400' : 'border-slate-200 hover:bg-slate-100 text-slate-600'
               }`}
-              title="Toggle Light / Dark Mode"
+              title="Toggle Light/Dark Mode"
             >
               {darkMode ? <Sun size={16} /> : <Moon size={16} />}
             </button>
@@ -789,18 +633,18 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sub-Header Bar: Selection Toggle & Category Legend */}
+      {/* Sub-Header: Grade Tag Legend & Selection Mode Toggle */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
         
         {/* Category Legend Pill Tags */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-medium text-slate-400 mr-1 flex items-center">
-            <Layers size={13} className="mr-1" /> Categories:
+          <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center">
+            <Layers size={13} className="mr-1" /> Grade Tags:
           </span>
           {categories.map(cat => (
             <span
               key={cat.id}
-              className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium shadow-xs text-white"
+              className="inline-flex items-center space-x-1 text-xs px-2.5 py-0.5 rounded-full font-bold shadow-2xs border border-black/10 text-slate-900"
               style={{ backgroundColor: cat.color }}
             >
               <span>{cat.name}</span>
@@ -808,8 +652,15 @@ export default function App() {
           ))}
         </div>
 
-        {/* Batch Selection Mode Toggle (Method 4) */}
+        {/* Action Controls */}
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleResetToDefaults}
+            className="text-xs text-slate-400 hover:text-slate-600 underline px-2 py-1"
+          >
+            Reset Defaults
+          </button>
+          
           <button
             onClick={() => {
               setSelectionMode(!selectionMode);
@@ -817,20 +668,20 @@ export default function App() {
             }}
             className={`px-3 py-1 rounded-lg text-xs font-medium border flex items-center space-x-1.5 transition ${
               selectionMode 
-                ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
+                ? 'bg-blue-600 border-blue-600 text-white shadow-xs' 
                 : darkMode 
                 ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' 
                 : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
             }`}
           >
             {selectionMode ? <CheckSquare size={14} /> : <Square size={14} />}
-            <span>{selectionMode ? 'Selection Mode Active' : 'Batch Selection'}</span>
+            <span>{selectionMode ? 'Selection Active' : 'Batch Selection'}</span>
           </button>
         </div>
 
       </div>
 
-      {/* Floating Action Bar for Batch Selection Mode (Method 4) */}
+      {/* Floating Action Bar for Batch Selection Mode */}
       {selectionMode && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-4 text-xs font-medium animate-fade-in">
           <span>
@@ -855,7 +706,7 @@ export default function App() {
             onClick={() => setActiveModal('batchDelete')}
             className={`px-3 py-1.5 rounded-lg flex items-center space-x-1 transition ${
               selectedActivityIds.length > 0
-                ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm'
+                ? 'bg-red-600 hover:bg-red-700 text-white shadow-xs'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             }`}
           >
@@ -865,18 +716,17 @@ export default function App() {
         </div>
       )}
 
-      {}
       <main className="max-w-7xl mx-auto px-4 lg:px-8 mt-2">
-        <div className={`rounded-2xl border shadow-sm overflow-x-auto ${darkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+        <div className={`rounded-2xl border shadow-xs overflow-x-auto ${darkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}>
           <div className="min-w-[800px]">
             
-            {/* Grid Days Header Row (Method 5: Interactive Day Headers for Expanded Single Day Pop-up) */}
-            <div className={`grid grid-cols-8 border-b text-xs font-semibold ${darkMode ? 'border-slate-800 bg-slate-800/50 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+            {/* Grid Days Header Row */}
+            <div className={`grid grid-cols-9 border-b text-xs font-semibold ${darkMode ? 'border-slate-800 bg-slate-800/50 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
               
               {/* Time axis header */}
               <div className="p-3 border-r border-slate-200 dark:border-slate-800 flex items-center justify-center space-x-1 text-slate-400">
                 <Clock size={14} />
-                <span>GMT</span>
+                <span>TIME</span>
               </div>
 
               {/* Day Columns Headers */}
@@ -894,10 +744,10 @@ export default function App() {
                       setActiveModal('dayView');
                     }}
                     className={`p-2.5 border-r last:border-r-0 border-slate-200 dark:border-slate-800 text-center cursor-pointer transition hover:bg-blue-50 dark:hover:bg-blue-950/30 group`}
-                    title="Click for Expanded Single Day Detail View"
+                    title="Click for Expanded Single Day View"
                   >
                     <div className="text-slate-400 text-[10px] uppercase tracking-wider">{dayName}</div>
-                    <div className="font-bold text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center space-x-1">
+                    <div className="font-bold text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center space-x-1">
                       <span>{dayNum}</span>
                       <Maximize2 size={10} className="opacity-0 group-hover:opacity-100 transition text-blue-500" />
                     </div>
@@ -912,9 +762,9 @@ export default function App() {
             </div>
 
             {/* Time Grid Matrix Body */}
-            <div className="relative grid grid-cols-8 divide-x divide-slate-200 dark:divide-slate-800 min-h-[500px]">
+            <div className="relative grid grid-cols-9 divide-x divide-slate-200 dark:divide-slate-800 min-h-[500px]">
               
-              {/* Left Column: Hourly Time Slot Markers */}
+              {/* Left Column: Hourly Markers */}
               <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-400 text-[11px] text-right pr-2">
                 {timeSlots.map((timeStr) => (
                   <div key={timeStr} className="h-16 pt-1 font-mono">
@@ -923,14 +773,14 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Day Activity Columns */}
+              {/* Day Columns */}
               {dateColumns.map((dateStr) => {
                 const dayActs = filteredActivities.filter(a => a.date === dateStr);
 
                 return (
                   <div key={dateStr} className="relative divide-y divide-slate-100 dark:divide-slate-800/40">
                     
-                    {/* Background Hour Lines for Grid Alignment */}
+                    {/* Background Hour Slot Lines */}
                     {timeSlots.map((timeStr) => (
                       <div
                         key={timeStr}
@@ -940,13 +790,13 @@ export default function App() {
                             date: dateStr,
                             startTime: timeStr,
                             endTime: minutesToTime(timeToMinutes(timeStr) + 60),
-                            categoryIds: [categories[0]?.id || 'cat-work'],
+                            categoryIds: categories.map(c => c.id),
                             notes: ''
                           });
                           setActiveModal('activity');
                         }}
                         className="h-16 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition cursor-pointer"
-                        title={`Click to schedule activity at ${formatDisplayTime(timeStr)}`}
+                        title={`Click to add activity at ${formatDisplayTime(timeStr)}`}
                       />
                     ))}
 
@@ -955,7 +805,6 @@ export default function App() {
                       const actStartMins = timeToMinutes(act.startTime);
                       const actEndMins = timeToMinutes(act.endTime);
 
-                      // Calculate Top % and Height % within the timeline range
                       const topPercent = Math.max(0, ((actStartMins - gridStartMins) / totalGridMins) * 100);
                       const durationMins = Math.max(15, actEndMins - actStartMins);
                       const heightPercent = (durationMins / totalGridMins) * 100;
@@ -970,18 +819,17 @@ export default function App() {
                             top: `${topPercent}%`,
                             height: `${heightPercent}%`,
                             position: 'absolute',
-                            left: '4px',
-                            right: '4px',
+                            left: '3px',
+                            right: '3px',
                             ...categoryStyle
                           }}
-                          className={`rounded-xl p-2 text-xs shadow-md border border-white/20 overflow-hidden transition-all duration-150 flex flex-col justify-between group hover:z-20 hover:scale-[1.02] ${
-                            isSelected ? 'ring-2 ring-amber-400 ring-offset-1' : ''
+                          className={`rounded-xl p-2 text-xs shadow-sm border border-slate-900/10 overflow-hidden transition-all duration-150 flex flex-col justify-between group hover:z-20 hover:scale-[1.02] ${
+                            isSelected ? 'ring-2 ring-blue-600 ring-offset-1' : ''
                           }`}
                         >
-                          {/* Card Header */}
+                          {/* Card Top */}
                           <div className="flex items-start justify-between gap-1">
                             
-                            {/* Selection Checkbox OR Title */}
                             <div className="flex items-center space-x-1 overflow-hidden">
                               {selectionMode && (
                                 <button
@@ -990,26 +838,25 @@ export default function App() {
                                     e.stopPropagation();
                                     toggleSelectActivity(act.id);
                                   }}
-                                  className="text-white hover:text-amber-200"
+                                  className="text-slate-900 hover:text-blue-700"
                                 >
                                   {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                                 </button>
                               )}
-                              <span className="font-bold truncate drop-shadow-sm text-white">
+                              <span className="font-bold truncate text-slate-900">
                                 {act.title}
                               </span>
                             </div>
 
-                            {/* Quick Action Icons */}
                             {!selectionMode && (
-                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center space-x-1 bg-black/40 backdrop-blur-xs p-0.5 rounded-md">
+                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center space-x-1 bg-white/80 backdrop-blur-xs p-0.5 rounded-md shadow-xs">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleOpenEditModal(act);
                                   }}
-                                  className="p-0.5 text-white hover:text-blue-200"
-                                  title="Edit Activity"
+                                  className="p-0.5 text-slate-700 hover:text-blue-600"
+                                  title="Edit"
                                 >
                                   <Edit3 size={11} />
                                 </button>
@@ -1018,8 +865,8 @@ export default function App() {
                                     e.stopPropagation();
                                     handleDeleteSingleActivity(act.id);
                                   }}
-                                  className="p-0.5 text-white hover:text-red-200"
-                                  title="Delete Activity"
+                                  className="p-0.5 text-slate-700 hover:text-red-600"
+                                  title="Delete"
                                 >
                                   <Trash2 size={11} />
                                 </button>
@@ -1027,9 +874,9 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Time Details & Tags */}
-                          <div className="mt-1 text-[10px] opacity-90 flex items-center justify-between drop-shadow-sm">
-                            <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-[9px]">
+                          {/* Time & Notes Details */}
+                          <div className="mt-1 text-[10px] flex items-center justify-between text-slate-900 font-semibold">
+                            <span className="font-mono bg-white/60 px-1 py-0.2 rounded text-[9px] border border-black/5">
                               {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
                             </span>
                           </div>
@@ -1047,7 +894,6 @@ export default function App() {
         </div>
       </main>
 
-      {}
       {activeModal === 'activity' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1067,7 +913,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Morning Workout / Client Call"
+                  placeholder="e.g. Opening Program / Science Quiz Bee"
                   value={activityForm.title}
                   onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
                   className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
@@ -1094,7 +940,7 @@ export default function App() {
                   <label className="block font-semibold mb-1 text-slate-500">Start Time</label>
                   <input
                     type="time"
-                    step="300" // 5 min precision
+                    step="300"
                     required
                     value={activityForm.startTime}
                     onChange={(e) => setActivityForm({ ...activityForm, startTime: e.target.value })}
@@ -1118,10 +964,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Multi-Tag Category Selection (Method 3 Striped Gradient support) */}
+              {/* Multi-Tag Selection */}
               <div>
                 <label className="block font-semibold mb-1 text-slate-500">
-                  Category Tags (Select multiple for Striped Gradient pattern)
+                  Target Grade Tags (Selecting multiple creates Striped Patterns)
                 </label>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {categories.map(cat => {
@@ -1141,14 +987,14 @@ export default function App() {
                             };
                           });
                         }}
-                        className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center space-x-1.5 transition ${
+                        className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center space-x-1 transition ${
                           isSelected
-                            ? 'ring-2 ring-blue-500 text-white font-bold'
-                            : 'opacity-60 text-slate-700 dark:text-slate-300'
+                            ? 'ring-2 ring-blue-600 text-slate-900 border-slate-900/30 shadow-xs'
+                            : 'opacity-40 text-slate-600'
                         }`}
                         style={{ backgroundColor: cat.color }}
                       >
-                        {isSelected && <Check size={12} />}
+                        {isSelected && <Check size={12} className="text-slate-900" />}
                         <span>{cat.name}</span>
                       </button>
                     );
@@ -1157,10 +1003,10 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block font-semibold mb-1 text-slate-500">Notes / Details</label>
+                <label className="block font-semibold mb-1 text-slate-500">Notes / Program Details</label>
                 <textarea
                   rows={3}
-                  placeholder="Additional context or checklist items..."
+                  placeholder="Additional context or location details..."
                   value={activityForm.notes}
                   onChange={(e) => setActivityForm({ ...activityForm, notes: e.target.value })}
                   className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
@@ -1189,7 +1035,6 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'share' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1204,7 +1049,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-              This link encodes your entire schedule data directly into the URL string. Computer 2 can open this link to view your schedule <strong>without needing any database setup</strong>!
+              This link encodes your entire schedule data directly into the URL string. Computer 2 can open this link to view your exact schedule <strong>without needing any database setup</strong>!
             </p>
 
             <div className="space-y-3 text-xs">
@@ -1221,7 +1066,7 @@ export default function App() {
 
               <div className="flex items-center justify-between pt-2">
                 <span className="text-[11px] text-slate-400">
-                  Tip: Send this link via Email, Messaging apps, or Slack!
+                  Send this link via Email, Messaging apps, or Slack!
                 </span>
                 <button
                   onClick={handleCopyShareLink}
@@ -1236,70 +1081,6 @@ export default function App() {
         </div>
       )}
 
-      {}
-      {activeModal === 'cloud' && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-base flex items-center space-x-2">
-                <Cloud size={18} className="text-blue-500" />
-                <span>Cloud Database Synchronization (Method 3)</span>
-              </h3>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              
-              {/* Current Status Badge */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                cloudSyncStatus === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200' : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
-              }`}>
-                <div className="flex items-center space-x-2">
-                  <Cloud size={18} className={cloudSyncStatus === 'connected' ? 'text-emerald-500' : 'text-slate-400'} />
-                  <div>
-                    <div className="font-bold">
-                      Status: {cloudSyncStatus === 'connected' ? 'Active Real-Time Cloud Sync' : 'Local Browser Mode'}
-                    </div>
-                    {cloudUserId && <div className="text-[10px] opacity-75 font-mono">User ID: {cloudUserId}</div>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Firebase Setup Form */}
-              <form onSubmit={handleSaveFirebaseConfig} className="space-y-3">
-                <label className="block font-semibold text-slate-500">
-                  Firebase JSON Configuration Object
-                </label>
-                <textarea
-                  rows={6}
-                  placeholder={`{\n  "apiKey": "AIzaSy...",\n  "authDomain": "my-app.firebaseapp.com",\n  "projectId": "my-app-123"\n}`}
-                  value={firebaseConfigText}
-                  onChange={(e) => setFirebaseConfigText(e.target.value)}
-                  className={`w-full p-3 rounded-lg border font-mono text-[11px] focus:ring-2 focus:ring-blue-500 focus:outline-none ${
-                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                  }`}
-                />
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">
-                    Paste your Firebase web config JSON above to enable multi-computer instant sync.
-                  </span>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-sm"
-                  >
-                    Save & Connect
-                  </button>
-                </div>
-              </form>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-      {}
       {activeModal === 'dayView' && selectedDayForView && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-xl rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1311,14 +1092,13 @@ export default function App() {
                     {new Date(selectedDayForView + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400">Detailed Chronological Timeline View</p>
+                <p className="text-xs text-slate-400">Chronological Day Schedule</p>
               </div>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
               </button>
             </div>
 
-            {/* List of Day Activities in Order */}
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {activities.filter(a => a.date === selectedDayForView).length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
@@ -1335,27 +1115,25 @@ export default function App() {
                       <div
                         key={act.id}
                         style={{ ...categoryStyle }}
-                        className="rounded-xl p-3 shadow-md border border-white/20 text-white transition hover:scale-[1.01]"
+                        className="rounded-xl p-3 shadow-sm border border-black/10 text-slate-900 transition hover:scale-[1.01]"
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <h4 className="font-bold text-sm drop-shadow-sm">{act.title}</h4>
+                            <h4 className="font-bold text-sm">{act.title}</h4>
                             <div className="text-xs font-mono opacity-90 mt-0.5">
                               {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
                             </div>
                           </div>
                           <div className="flex items-center space-x-1">
                             <button
-                              onClick={() => {
-                                handleOpenEditModal(act);
-                              }}
-                              className="p-1 text-white/80 hover:text-white"
+                              onClick={() => handleOpenEditModal(act)}
+                              className="p-1 text-slate-800 hover:text-blue-700"
                             >
                               <Edit3 size={14} />
                             </button>
                             <button
                               onClick={() => handleDeleteSingleActivity(act.id)}
-                              className="p-1 text-white/80 hover:text-white"
+                              className="p-1 text-slate-800 hover:text-red-700"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1363,7 +1141,7 @@ export default function App() {
                         </div>
 
                         {act.notes && (
-                          <div className="mt-2 text-xs opacity-90 bg-black/20 p-2 rounded-lg border border-white/10">
+                          <div className="mt-2 text-xs opacity-90 bg-white/60 p-2 rounded-lg border border-black/5">
                             {act.notes}
                           </div>
                         )}
@@ -1376,7 +1154,7 @@ export default function App() {
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
               <button
                 onClick={() => handleOpenAddModal(selectedDayForView)}
-                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center space-x-1 shadow-sm"
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center space-x-1 shadow-xs"
               >
                 <Plus size={14} />
                 <span>Add Activity to this Day</span>
@@ -1392,21 +1170,19 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'categories' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-base flex items-center space-x-2">
                 <Tag size={18} className="text-emerald-500" />
-                <span>Category Tag & Striped Pattern Manager</span>
+                <span>Grade Tag & Color Manager</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Category List */}
             <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
               {categories.map(cat => (
                 <div
@@ -1417,10 +1193,10 @@ export default function App() {
                 >
                   <div className="flex items-center space-x-2">
                     <span
-                      className="w-4 h-4 rounded-full border border-white/20 shadow-xs"
+                      className="w-4 h-4 rounded-full border border-black/20 shadow-2xs"
                       style={{ backgroundColor: cat.color }}
                     />
-                    <span className="font-medium">{cat.name}</span>
+                    <span className="font-bold">{cat.name}</span>
                   </div>
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}
@@ -1432,14 +1208,13 @@ export default function App() {
               ))}
             </div>
 
-            {/* Add New Category Form */}
             <form onSubmit={handleAddCategory} className="space-y-3 border-t pt-3 border-slate-200 dark:border-slate-800">
               <label className="block text-xs font-semibold text-slate-500">Create New Tag</label>
               <div className="flex space-x-2">
                 <input
                   type="text"
                   required
-                  placeholder="Category Name"
+                  placeholder="e.g. Faculty / Guests"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   className={`flex-1 px-3 py-1.5 rounded-lg border text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none ${
@@ -1464,14 +1239,13 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'analytics' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-base flex items-center space-x-2">
                 <BarChart2 size={18} className="text-purple-500" />
-                <span>Time Allocation Analytics</span>
+                <span>Time Analytics</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1489,9 +1263,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Progress Breakdown Bars */}
             <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-500">Breakdown by Category</h4>
+              <h4 className="text-xs font-semibold text-slate-500">Breakdown by Grade Tag</h4>
               {analyticsData.categoryBreakdown.map(cat => (
                 <div key={cat.id} className="space-y-1 text-xs">
                   <div className="flex justify-between font-medium">
@@ -1517,14 +1290,13 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'settings' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-base flex items-center space-x-2">
                 <Settings size={18} className="text-slate-500" />
-                <span>Grid & Date Range Settings</span>
+                <span>Schedule Settings & Offline Backup</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1535,16 +1307,16 @@ export default function App() {
               onSubmit={(e) => {
                 e.preventDefault();
                 setActiveModal(null);
-                showToast('Schedule settings updated!', 'success');
+                showToast('Settings saved!', 'success');
               }}
               className="space-y-3 text-xs"
             >
               <div>
-                <label className="block font-semibold mb-1 text-slate-500">Schedule Title</label>
+                <label className="block font-semibold mb-1 text-slate-500">Schedule Name</label>
                 <input
                   type="text"
                   value={scheduleMeta.title}
-                  onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, title: e.target.value })}
+                  onChange={(e) => setScheduleMeta({ ...scheduleMeta, title: e.target.value })}
                   className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
                     darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
@@ -1557,7 +1329,7 @@ export default function App() {
                   <input
                     type="date"
                     value={scheduleMeta.startDate}
-                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, startDate: e.target.value })}
+                    onChange={(e) => setScheduleMeta({ ...scheduleMeta, startDate: e.target.value })}
                     className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
                       darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
@@ -1568,7 +1340,7 @@ export default function App() {
                   <input
                     type="date"
                     value={scheduleMeta.endDate}
-                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, endDate: e.target.value })}
+                    onChange={(e) => setScheduleMeta({ ...scheduleMeta, endDate: e.target.value })}
                     className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
                       darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
@@ -1576,44 +1348,19 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-500">Grid Start Time</label>
-                  <input
-                    type="time"
-                    value={scheduleMeta.startTime}
-                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, startTime: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
-                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-500">Grid End Time</label>
-                  <input
-                    type="time"
-                    value={scheduleMeta.endTime}
-                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, endTime: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
-                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Data Backup / Export */}
+              {/* JSON Backup & File Import Section */}
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                <label className="block font-semibold text-slate-500">Backup & Recovery</label>
+                <label className="block font-semibold text-slate-500">File Backup & Import (.json)</label>
                 <div className="flex space-x-2">
                   <button
                     type="button"
                     onClick={handleExportJSON}
-                    className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1"
+                    className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1 font-semibold"
                   >
                     <Download size={14} />
                     <span>Export JSON</span>
                   </button>
-                  <label className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1 cursor-pointer">
+                  <label className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1 font-semibold cursor-pointer">
                     <Upload size={14} />
                     <span>Import JSON</span>
                     <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
@@ -1634,16 +1381,15 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'batchDelete' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-sm rounded-2xl shadow-2xl border p-6 text-center ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400 mx-auto flex items-center justify-center mb-3">
               <AlertTriangle size={24} />
             </div>
-            <h3 className="font-bold text-base mb-1">Confirm Batch Deletion</h3>
+            <h3 className="font-bold text-base mb-1">Confirm Batch Delete</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Are you sure you want to permanently delete <strong>{selectedActivityIds.length}</strong> selected activities?
+              Are you sure you want to delete <strong>{selectedActivityIds.length}</strong> selected activities?
             </p>
             <div className="flex justify-center space-x-2 text-xs">
               <button
