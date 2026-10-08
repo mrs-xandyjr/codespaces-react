@@ -4,7 +4,7 @@ import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
-  Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles
+  Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette
 } from 'lucide-react';
 
 // Firebase credentials provided for Method 3 Cloud Synchronization
@@ -47,6 +47,11 @@ const DEFAULT_TAGS = [
   { id: 'tag-g10', name: 'Grade 10', color: '#93c5fd' }, // pastel blue
   { id: 'tag-g11', name: 'Grade 11', color: '#fbcfe8' }, // pastel pink
   { id: 'tag-g12', name: 'Grade 12', color: '#fed7aa' }, // pastel orange
+];
+
+const PASTEL_PALETTE = [
+  '#a7f3d0', '#fef08a', '#fca5a5', '#93c5fd', '#fbcfe8', '#fed7aa',
+  '#c084fc', '#ddd6fe', '#bae6fd', '#a7f3d0', '#fde68a', '#e2e8f0'
 ];
 
 // Initial default Opening Program activity covering all grades
@@ -103,7 +108,6 @@ function detectConflicts(activities) {
       const a = activities[i];
       const b = activities[j];
 
-      // Conflicts can only occur on the same day
       if (a.date !== b.date) continue;
 
       const aStart = timeToMins(a.startTime);
@@ -111,16 +115,13 @@ function detectConflicts(activities) {
       const bStart = timeToMins(b.startTime);
       const bEnd = timeToMins(b.endTime);
 
-      // Check time overlap condition
       if (aStart < bEnd && bStart < aEnd) {
-        // Tag Conflict Check: share at least 1 common tag
         const sharedTags = a.tags.filter(t => b.tags.includes(t));
         if (sharedTags.length > 0) {
           conflictMap.get(a.id).tagConflict = true;
           conflictMap.get(b.id).tagConflict = true;
         }
 
-        // Venue Conflict Check: share exact same venue name (case-insensitive, non-empty)
         if (
           a.venue && b.venue &&
           a.venue.trim().length > 0 &&
@@ -141,7 +142,6 @@ function detectConflicts(activities) {
 function computeOverlappingDayLayouts(dayActivities) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
-  // Sort activities by start time, then by duration descending
   const sorted = [...dayActivities].sort((a, b) => {
     const aStart = timeToMins(a.startTime);
     const bStart = timeToMins(b.startTime);
@@ -151,7 +151,6 @@ function computeOverlappingDayLayouts(dayActivities) {
     return bDur - aDur;
   });
 
-  // Group into overlapping clusters
   const clusters = [];
   let currentCluster = [];
   let maxClusterEnd = -1;
@@ -171,7 +170,6 @@ function computeOverlappingDayLayouts(dayActivities) {
   });
   if (currentCluster.length > 0) clusters.push(currentCluster);
 
-  // Assign column slots for side-by-side rendering
   const layoutResults = [];
 
   clusters.forEach(cluster => {
@@ -228,7 +226,6 @@ function getMultiTagBackground(actTags, allTags) {
 
   if (tagColors.length === 1) return tagColors[0];
 
-  // Stripe step percentage
   const step = 100 / tagColors.length;
   const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1) * step}%`).join(', ');
   return `linear-gradient(135deg, ${stops})`;
@@ -265,6 +262,12 @@ export default function App() {
   const [confirmDialog, setConfirmDialog] = useState(null); // { title, message, onConfirm }
   const [shareToast, setShareToast] = useState(false);
 
+  // Tag Management State
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+  const [editingTagId, setEditingTagId] = useState(null);
+  const [tagNameInput, setTagNameInput] = useState('');
+  const [tagColorInput, setTagColorInput] = useState('#93c5fd');
+
   // Form State for Activity Add/Edit
   const [formTitle, setFormTitle] = useState('');
   const [formDate, setFormDate] = useState('2027-01-20');
@@ -275,9 +278,9 @@ export default function App() {
   const [formTags, setFormTags] = useState([]);
 
   // Dragging and Resizing state tracking
-  const [draggingAct, setDraggingAct] = useState(null); // { actId, initialStartMins, initialEndMins, isResize, grabOffsetMins }
+  const [draggingAct, setDraggingAct] = useState(null);
 
-  // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing (Method 2)
+  // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
@@ -305,9 +308,9 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Effect 2: Real-time Firestore Synchronization (Method 3)
+  // Effect 2: Real-time Firestore Synchronization
   useEffect(() => {
-    if (isReadOnly) return; // Skip cloud sync if explicitly in shared read-only mode
+    if (isReadOnly) return;
 
     const docRef = doc(db, "schedules", FIREBASE_DOC_PATH);
 
@@ -324,7 +327,6 @@ export default function App() {
           }
           setSyncStatus('synced');
         } else {
-          // Initialize document if first time creation
           const initialData = {
             activities: DEFAULT_INITIAL_ACTIVITIES,
             tags: DEFAULT_TAGS,
@@ -341,7 +343,6 @@ export default function App() {
       (error) => {
         console.warn("Firestore subscription fallback to local cache:", error);
         setSyncStatus('local');
-        // Fallback to localStorage
         const localData = localStorage.getItem('ymsat_2027_schedule');
         if (localData) {
           try {
@@ -392,7 +393,6 @@ export default function App() {
     if (!draggingAct || isReadOnly) return;
 
     const handleGlobalMouseMove = (e) => {
-      // Find the day column element directly under cursor
       const columnEl = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-day-column="true"]');
       if (!columnEl) return;
 
@@ -401,21 +401,17 @@ export default function App() {
       const offsetY = e.clientY - rect.top;
       const percentage = Math.max(0, Math.min(1, offsetY / rect.height));
 
-      // Current pointer time in minutes
       const currentMins = snapTo5Mins(GRID_START_MINS + percentage * TOTAL_GRID_MINS);
 
       if (draggingAct.isResize) {
-        // Resizing bottom duration edge
         const newEndMins = Math.max(draggingAct.initialStartMins + 15, Math.min(GRID_END_MINS, currentMins));
         const newEndTime = minsToTime(newEndMins);
 
         setActivities(prev => prev.map(a => a.id === draggingAct.actId ? { ...a, endTime: newEndTime } : a));
       } else {
-        // Dragging activity block across date and/or time
         const duration = draggingAct.initialEndMins - draggingAct.initialStartMins;
         let newStartMins = snapTo5Mins(currentMins - draggingAct.grabOffsetMins);
 
-        // Clamping within grid boundaries (6:00 AM – 6:00 PM)
         if (newStartMins < GRID_START_MINS) newStartMins = GRID_START_MINS;
         if (newStartMins + duration > GRID_END_MINS) newStartMins = GRID_END_MINS - duration;
 
@@ -444,12 +440,84 @@ export default function App() {
     };
   }, [draggingAct, isReadOnly]);
 
+  // Tag Management Handlers
+  const startCreateTag = () => {
+    setEditingTagId(null);
+    setTagNameInput('');
+    setTagColorInput('#93c5fd');
+  };
+
+  const startEditTag = (tag) => {
+    setEditingTagId(tag.id);
+    setTagNameInput(tag.name);
+    setTagColorInput(tag.color);
+  };
+
+  const handleSaveTag = (e) => {
+    e.preventDefault();
+    if (!tagNameInput.trim()) return;
+
+    const newName = tagNameInput.trim();
+
+    if (editingTagId) {
+      // Edit Tag
+      const oldTag = tags.find(t => t.id === editingTagId);
+      const oldName = oldTag ? oldTag.name : '';
+
+      const updatedTags = tags.map(t => t.id === editingTagId ? { ...t, name: newName, color: tagColorInput } : t);
+
+      // Cascade tag name update across activities if renamed
+      let updatedActivities = activities;
+      if (oldName && oldName !== newName) {
+        updatedActivities = activities.map(act => ({
+          ...act,
+          tags: act.tags.map(t => t === oldName ? newName : t)
+        }));
+        setSelectedTagFilters(prev => prev.map(t => t === oldName ? newName : t));
+      }
+
+      saveToCloud(updatedActivities, updatedTags);
+    } else {
+      // Add New Tag
+      if (tags.some(t => t.name.toLowerCase() === newName.toLowerCase())) {
+        alert("A tag with this name already exists.");
+        return;
+      }
+      const newTag = {
+        id: `tag-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        name: newName,
+        color: tagColorInput
+      };
+      const updatedTags = [...tags, newTag];
+      saveToCloud(activities, updatedTags);
+    }
+
+    startCreateTag();
+  };
+
+  const handleDeleteTag = (tagId, tagName) => {
+    setConfirmDialog({
+      title: `Delete Tag "${tagName}"`,
+      message: `Are you sure you want to delete this tag? It will be removed from all assigned activities.`,
+      onConfirm: () => {
+        const updatedTags = tags.filter(t => t.id !== tagId);
+        const updatedActivities = activities.map(act => ({
+          ...act,
+          tags: act.tags.filter(t => t !== tagName)
+        }));
+        setSelectedTagFilters(prev => prev.filter(t => t !== tagName));
+        saveToCloud(updatedActivities, updatedTags);
+        if (editingTagId === tagId) startCreateTag();
+        setConfirmDialog(null);
+      }
+    });
+  };
+
   const openAddActivityModal = (defaultDate = '2027-01-20', defaultStart = '08:00') => {
     setEditingActivity(null);
     setFormTitle('');
     setFormDate(defaultDate);
     setFormStartTime(defaultStart);
-    // Default 1 hour duration
     const endMins = Math.min(timeToMins(defaultStart) + 60, GRID_END_MINS);
     setFormEndTime(minsToTime(endMins));
     setFormVenue('');
@@ -516,7 +584,6 @@ export default function App() {
     });
   };
 
-  // Batch delete selected activities
   const handleBatchDelete = () => {
     if (selectedActIds.size === 0) return;
     setConfirmDialog({
@@ -532,7 +599,6 @@ export default function App() {
     });
   };
 
-  // Convert Read-Only Snapshot into Editable Live Sync copy
   const handleMakeEditableCopy = () => {
     window.location.hash = '';
     setIsReadOnly(false);
@@ -540,7 +606,6 @@ export default function App() {
     saveToCloud(activities, tags);
   };
 
-  // Generate Read-Only Share Link (Method 2)
   const handleShareReadOnlyLink = () => {
     const payload = { activities, tags };
     const encoded = btoa(JSON.stringify(payload));
@@ -552,7 +617,6 @@ export default function App() {
     });
   };
 
-  // Initiate Mouse Drag or Resize
   const handleMouseDown = (e, act, isResize = false) => {
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
@@ -577,16 +641,13 @@ export default function App() {
     });
   };
 
-  // Filter activities based on Search query & selected Tag filters
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
-      // Search title, venue, or description
       const matchesSearch = !searchQuery ||
         act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (act.venue && act.venue.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (act.description && act.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // Tag Filter: if tags selected, activity must have at least 1 selected tag
       const matchesTag = selectedTagFilters.length === 0 ||
         act.tags.some(t => selectedTagFilters.includes(t));
 
@@ -594,12 +655,10 @@ export default function App() {
     });
   }, [activities, searchQuery, selectedTagFilters]);
 
-  // Conflict evaluation map
   const conflictMap = useMemo(() => {
     return detectConflicts(activities);
   }, [activities]);
 
-  // Active conflict count summary
   const conflictSummary = useMemo(() => {
     let tagConflicts = 0;
     let venueConflicts = 0;
@@ -610,7 +669,6 @@ export default function App() {
     return { tagConflicts, venueConflicts, total: tagConflicts + venueConflicts };
   }, [conflictMap]);
 
-  // Venue list history for auto-complete/suggestions
   const existingVenues = useMemo(() => {
     const set = new Set();
     activities.forEach(a => { if (a.venue) set.add(a.venue); });
@@ -641,7 +699,6 @@ export default function App() {
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm`}>
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
 
-          {/* Logo & Live Sync Indicator */}
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2 rounded-xl text-white shadow-md">
               <Calendar className="w-6 h-6" />
@@ -653,7 +710,6 @@ export default function App() {
               <p className="text-xs text-slate-500 dark:text-slate-400">Jan 20 – Jan 27, 2027 • 6:00 AM – 6:00 PM</p>
             </div>
 
-            {/* Cloud Sync Status Badge */}
             <div className="ml-2">
               {syncStatus === 'synced' && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
@@ -676,7 +732,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Action Header Buttons */}
           <div className="flex items-center space-x-2">
             {!isReadOnly && (
               <button
@@ -746,7 +801,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Tag Filter Selector */}
+          {/* Tag Filter Selector & Manage Tags Button */}
           <div className="flex items-center space-x-1.5 flex-wrap gap-1">
             <Filter className="w-4 h-4 text-slate-400 mr-1" />
             {tags.map(tag => {
@@ -774,6 +829,20 @@ export default function App() {
                 className="text-xs text-blue-500 hover:underline px-1 font-medium"
               >
                 Clear Filters
+              </button>
+            )}
+
+            {!isReadOnly && (
+              <button
+                onClick={() => {
+                  startCreateTag();
+                  setIsTagModalOpen(true);
+                }}
+                className={`ml-1 px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center space-x-1 transition ${darkMode ? 'border-indigo-800 bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900/80' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                title="Add or Edit Grade Level Tags"
+              >
+                <Tag className="w-3 h-3" />
+                <span>Manage Tags</span>
               </button>
             )}
           </div>
@@ -805,7 +874,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Conflict Warning Summary Banner (if conflicts exist) */}
+        {/* Conflict Warning Summary Banner */}
         {conflictSummary.total > 0 && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-rose-700 dark:text-rose-300 gap-2">
             <div className="flex items-center space-x-2">
@@ -921,7 +990,6 @@ export default function App() {
                       const isSelected = selectedActIds.has(act.id);
                       const isBeingDragged = draggingAct?.actId === act.id;
 
-                      // Style Determination: Tag conflict = Solid BLACK; Venue conflict = Solid WHITE with blue border; Combined = Zebra
                       let cardStyle = {};
                       let cardClasses = "absolute rounded-md p-1.5 shadow-sm border transition-all text-xs overflow-hidden flex flex-col justify-between group/card select-none ";
 
@@ -934,20 +1002,16 @@ export default function App() {
                       }
 
                       if (isTagConf && isVenueConf) {
-                        // Combined Conflict: Zebra striped pattern
                         cardClasses += "bg-slate-950 text-white border-2 border-blue-500 ring-2 ring-rose-500 ";
                         cardStyle = {
                           backgroundImage: 'repeating-linear-gradient(45deg, #000, #000 10px, #fff 10px, #fff 20px)',
                           color: '#000'
                         };
                       } else if (isTagConf) {
-                        // Tag Conflict: Solid BLACK background, white text
                         cardClasses += "bg-slate-950 text-white border-slate-900 font-medium ";
                       } else if (isVenueConf) {
-                        // Venue Conflict: Solid WHITE background, heavy blue border
                         cardClasses += "bg-white text-slate-950 border-[3px] border-blue-600 font-medium shadow-md ";
                       } else {
-                        // Normal Activity Style with multi-tag linear gradient
                         const multiBg = getMultiTagBackground(act.tags, tags);
                         cardStyle = { background: multiBg };
                         cardClasses += "border-slate-300/70 dark:border-slate-700/70 text-slate-900 font-medium hover:shadow-md ";
@@ -975,14 +1039,12 @@ export default function App() {
                           }}
                           className={cardClasses}
                         >
-                          {/* Card Content Top */}
                           <div>
                             <div className="flex items-start justify-between gap-1">
                               <div className="font-bold truncate text-[11px] leading-tight">
                                 {act.title}
                               </div>
 
-                              {/* Batch Selection Checkbox */}
                               {batchMode && (
                                 <input
                                   type="checkbox"
@@ -993,7 +1055,6 @@ export default function App() {
                               )}
                             </div>
 
-                            {/* Time & Venue Info */}
                             <div className="text-[10px] opacity-90 flex items-center space-x-1 mt-0.5 font-mono">
                               <Clock className="w-2.5 h-2.5 flex-shrink-0" />
                               <span>{format12H(act.startTime)} - {format12H(act.endTime)}</span>
@@ -1007,7 +1068,6 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Conflict Badges & Tags Footer */}
                           <div>
                             {isTagConf && (
                               <div className="bg-red-600 text-white font-bold text-[9px] px-1 py-0.5 rounded mt-1 inline-flex items-center space-x-0.5">
@@ -1034,7 +1094,6 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Action Hover Controls (Edit / Delete) */}
                           {!isReadOnly && !batchMode && (
                             <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 flex items-center space-x-0.5 bg-slate-900/80 text-white rounded p-0.5 transition">
                               <button
@@ -1054,7 +1113,6 @@ export default function App() {
                             </div>
                           )}
 
-                          {/* Resize Bottom Handle */}
                           {!isReadOnly && !batchMode && (
                             <div
                               onMouseDown={(e) => handleMouseDown(e, act, true)}
@@ -1090,9 +1148,9 @@ export default function App() {
             </div>
           </div>
           <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active Filters</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono">Configured Tags</div>
             <div className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-              {selectedTagFilters.length > 0 ? `${selectedTagFilters.length} Tag(s)` : 'Showing All'}
+              {tags.length} Custom Tag(s)
             </div>
           </div>
         </div>
@@ -1163,7 +1221,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Venue Input with Auto-Suggestions */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Venue / Location</label>
                 <div className="relative">
@@ -1182,9 +1239,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Tag Selection Multi-Checkboxes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Grade Level Tags</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Grade Level / Event Tags</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startCreateTag();
+                      setIsTagModalOpen(true);
+                    }}
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-semibold"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ Add / Edit Tags</span>
+                  </button>
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {tags.map(tag => {
                     const isChecked = formTags.includes(tag.name);
@@ -1241,7 +1311,133 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 2: Expanded Single Day View Modal */}
+      {/* MODAL 2: Manage Tags Add / Edit Modal */}
+      {isTagModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
+              <h2 className="text-lg font-bold flex items-center space-x-2">
+                <Tag className="w-5 h-5 text-indigo-500" />
+                <span>Manage Grade Level & Activity Tags</span>
+              </h2>
+              <button onClick={() => setIsTagModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tag Add/Edit Form */}
+            <form onSubmit={handleSaveTag} className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 mt-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                <span>{editingTagId ? 'Edit Selected Tag' : 'Create New Tag'}</span>
+                {editingTagId && (
+                  <button type="button" onClick={startCreateTag} className="text-slate-400 hover:text-slate-600 text-[11px] font-normal underline">
+                    Cancel Editing
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="Tag Name (e.g. Grade 12, VIP, Workshop)"
+                  value={tagNameInput}
+                  onChange={(e) => setTagNameInput(e.target.value)}
+                  className={`flex-1 px-3 py-1.5 text-xs rounded-lg border focus:ring-2 focus:ring-indigo-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700' : 'bg-white border-slate-300'}`}
+                />
+
+                <div className="flex items-center space-x-1 border rounded-lg p-1 dark:border-slate-700 bg-white dark:bg-slate-950">
+                  <input
+                    type="color"
+                    value={tagColorInput}
+                    onChange={(e) => setTagColorInput(e.target.value)}
+                    className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                    title="Choose Custom Color"
+                  />
+                  <span className="text-[10px] font-mono text-slate-500 uppercase">{tagColorInput}</span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{editingTagId ? 'Update' : 'Add'}</span>
+                </button>
+              </div>
+
+              {/* Pastel Swatch Quick Select */}
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Pastel Palette Presets:</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PASTEL_PALETTE.map(hex => (
+                    <button
+                      key={hex}
+                      type="button"
+                      onClick={() => setTagColorInput(hex)}
+                      style={{ backgroundColor: hex }}
+                      className={`w-5 h-5 rounded-full border border-slate-400/50 transition hover:scale-110 ${tagColorInput === hex ? 'ring-2 ring-indigo-600 scale-110' : ''}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </form>
+
+            {/* List of Existing Tags */}
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Configured Tags ({tags.length})</label>
+              <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                {tags.map(tag => {
+                  const assignedCount = activities.filter(a => a.tags.includes(tag.name)).length;
+                  return (
+                    <div
+                      key={tag.id}
+                      className={`p-2 rounded-xl border flex items-center justify-between transition ${darkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <span style={{ backgroundColor: tag.color }} className="w-4 h-4 rounded-full border border-slate-400/40 shadow-sm" />
+                        <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">{tag.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">({assignedCount} {assignedCount === 1 ? 'activity' : 'activities'})</span>
+                      </div>
+
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => startEditTag(tag)}
+                          className="p-1 rounded text-slate-500 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition"
+                          title="Edit Tag Name or Color"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTag(tag.id, tag.name)}
+                          className="p-1 rounded text-slate-500 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition"
+                          title="Delete Tag"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsTagModalOpen(false)}
+                className="bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-1.5 rounded-lg text-xs font-bold shadow transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Expanded Single Day View Modal */}
       {expandedDay && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
           <div className={`w-full max-w-4xl h-[90vh] rounded-2xl border shadow-2xl flex flex-col p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1260,10 +1456,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* Expanded Day Grid Body */}
             <div className="flex-1 overflow-y-auto mt-4 pr-2 relative">
               <div className="relative grid grid-cols-[80px_1fr] h-[1000px] select-none border rounded-xl overflow-hidden">
-                {/* Time Axis */}
                 <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-xs text-slate-400 bg-slate-50 dark:bg-slate-950">
                   {Array.from({ length: 13 }).map((_, idx) => {
                     const mins = GRID_START_MINS + idx * 60;
@@ -1275,7 +1469,6 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Day Column Events */}
                 <div className="relative h-full">
                   {Array.from({ length: 12 }).map((_, idx) => (
                     <div key={idx} style={{ top: `${(idx / 12) * 100}%` }} className="absolute left-0 right-0 border-t border-slate-200 dark:border-slate-800/60" />
@@ -1334,7 +1527,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 3: Settings & JSON Backup Import/Export Modal */}
+      {/* MODAL 4: Settings & JSON Backup Import/Export Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1352,7 +1545,6 @@ export default function App() {
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">JSON Backup Options</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Export JSON */}
                   <button
                     onClick={() => {
                       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ activities, tags }, null, 2));
@@ -1369,7 +1561,6 @@ export default function App() {
                     <span>Export JSON</span>
                   </button>
 
-                  {/* Import JSON */}
                   <label className="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex flex-col items-center justify-center text-xs font-semibold space-y-1 cursor-pointer">
                     <Upload className="w-5 h-5 text-emerald-500" />
                     <span>Import JSON</span>
@@ -1401,13 +1592,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Reset Default Activity */}
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   onClick={() => {
                     setConfirmDialog({
                       title: "Reset Schedule Data",
-                      message: "Are you sure you want to restore default Opening Program activity?",
+                      message: "Are you sure you want to restore default Opening Program activity and tags?",
                       onConfirm: () => {
                         saveToCloud(DEFAULT_INITIAL_ACTIVITIES, DEFAULT_TAGS);
                         setIsSettingsOpen(false);
@@ -1417,7 +1607,7 @@ export default function App() {
                   }}
                   className="w-full text-center text-xs text-rose-500 hover:text-rose-600 font-semibold py-1.5"
                 >
-                  Reset to Default Opening Program
+                  Reset to Default Opening Program & Tags
                 </button>
               </div>
             </div>
@@ -1425,7 +1615,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 4: Custom Confirmation Dialog */}
+      {/* MODAL 5: Custom Confirmation Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
