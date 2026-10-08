@@ -4,7 +4,8 @@ import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
-  Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette
+  Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
+  ChevronDown
 } from 'lucide-react';
 
 // Firebase credentials provided for Method 3 Cloud Synchronization
@@ -251,6 +252,8 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState([]);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef(null);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedActIds, setSelectedActIds] = useState(new Set());
 
@@ -279,6 +282,17 @@ export default function App() {
 
   // Dragging and Resizing state tracking
   const [draggingAct, setDraggingAct] = useState(null);
+
+  // Effect for Closing Filter Menu on Outside Click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target)) {
+        setIsFilterMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing
   useEffect(() => {
@@ -801,36 +815,91 @@ export default function App() {
             )}
           </div>
 
-          {/* Tag Filter Selector & Manage Tags Button */}
-          <div className="flex items-center space-x-1.5 flex-wrap gap-1">
-            <Filter className="w-4 h-4 text-slate-400 mr-1" />
-            {tags.map(tag => {
-              const isSelected = selectedTagFilters.includes(tag.name);
-              return (
-                <button
-                  key={tag.id}
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelectedTagFilters(selectedTagFilters.filter(t => t !== tag.name));
-                    } else {
-                      setSelectedTagFilters([...selectedTagFilters, tag.name]);
-                    }
-                  }}
-                  style={{ backgroundColor: isSelected ? tag.color : 'transparent', borderColor: tag.color }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${isSelected ? 'text-slate-900 shadow-sm font-semibold' : darkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}
-                >
-                  {tag.name}
-                </button>
-              );
-            })}
-            {selectedTagFilters.length > 0 && (
+          {/* Expandable Tag Filter Dropdown Menu & Manage Tags */}
+          <div className="flex items-center space-x-2">
+            <div className="relative" ref={filterMenuRef}>
               <button
-                onClick={() => setSelectedTagFilters([])}
-                className="text-xs text-blue-500 hover:underline px-1 font-medium"
+                onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center space-x-1.5 transition ${
+                  selectedTagFilters.length > 0
+                    ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
+                    : darkMode
+                    ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
               >
-                Clear Filters
+                <Filter className="w-3.5 h-3.5" />
+                <span>Filter Tags</span>
+                {selectedTagFilters.length > 0 && (
+                  <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                    {selectedTagFilters.length}
+                  </span>
+                )}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
               </button>
-            )}
+
+              {/* Filter Dropdown Popover */}
+              {isFilterMenuOpen && (
+                <div className={`absolute right-0 sm:left-0 sm:right-auto mt-2 w-56 rounded-xl border shadow-xl z-40 p-2 space-y-1.5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>Select Tags</span>
+                    {selectedTagFilters.length > 0 && (
+                      <button
+                        onClick={() => setSelectedTagFilters([])}
+                        className="text-blue-500 hover:underline capitalize text-[11px] font-medium"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto space-y-1 py-1">
+                    {tags.map(tag => {
+                      const isSelected = selectedTagFilters.includes(tag.name);
+                      return (
+                        <button
+                          key={tag.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedTagFilters(selectedTagFilters.filter(t => t !== tag.name));
+                            } else {
+                              setSelectedTagFilters([...selectedTagFilters, tag.name]);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                            isSelected
+                              ? darkMode ? 'bg-slate-800 text-white font-semibold' : 'bg-slate-100 text-slate-900 font-semibold'
+                              : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 truncate">
+                            <span style={{ backgroundColor: tag.color }} className="w-3 h-3 rounded-full border border-slate-400/40 flex-shrink-0" />
+                            <span className="truncate">{tag.name}</span>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 ml-1" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {!isReadOnly && (
+                    <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                      <button
+                        onClick={() => {
+                          setIsFilterMenuOpen(false);
+                          startCreateTag();
+                          setIsTagModalOpen(true);
+                        }}
+                        className="w-full flex items-center justify-center space-x-1 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition"
+                      >
+                        <Tag className="w-3 h-3" />
+                        <span>Manage Tags</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {!isReadOnly && (
               <button
@@ -838,11 +907,11 @@ export default function App() {
                   startCreateTag();
                   setIsTagModalOpen(true);
                 }}
-                className={`ml-1 px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center space-x-1 transition ${darkMode ? 'border-indigo-800 bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900/80' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center space-x-1 transition ${darkMode ? 'border-indigo-800 bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900/80' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
                 title="Add or Edit Grade Level Tags"
               >
-                <Tag className="w-3 h-3" />
-                <span>Manage Tags</span>
+                <Tag className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Manage Tags</span>
               </button>
             )}
           </div>
