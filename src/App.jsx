@@ -1,1900 +1,1234 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import {
-  Calendar,
-  Clock,
-  Plus,
-  Trash2,
-  Edit3,
-  Check,
-  X,
-  Search,
-  Download,
-  Upload,
-  Sun,
-  Moon,
-  BarChart3,
-  Filter,
-  CheckSquare,
-  Square,
-  AlertTriangle,
-  Settings,
-  Tag,
-  Info,
-  ChevronLeft,
-  ChevronRight,
-  Maximize2,
-  Minimize2,
-  FileSpreadsheet,
-  FileCode,
-  Sparkles,
-  Layers,
-  CalendarDays,
-  Sliders,
-  Move
+  Calendar, Clock, Plus, Trash2, Edit3, Share2, Cloud, CloudOff, Settings,
+  Sun, Moon, Tag, Filter, CheckSquare, Square, Maximize2, Download, Upload,
+  X, Check, Copy, ExternalLink, BarChart2, RefreshCw, AlertCircle, Eye, Save,
+  Grid, ChevronLeft, ChevronRight, CheckCircle2, Layers, AlertTriangle, FileText
 } from 'lucide-react';
 
-// Time window defaults (6:00 AM to 6:00 PM)
-const DEFAULT_START_HOUR = 6;
-const DEFAULT_END_HOUR = 18;
-
-// Pixel scales for main grid and expanded single-day popup
-const MAIN_HOUR_HEIGHT = 80;
-const DAY_VIEW_HOUR_HEIGHT = 120;
-
-// Preset Color Swatches for Categories
-const PRESET_COLORS = [
-  '#3B82F6', // Blue
-  '#10B981', // Emerald
-  '#8B5CF6', // Purple
-  '#F59E0B', // Amber
-  '#EC4899', // Pink
-  '#14B8A6', // Teal
-  '#EF4444', // Red
-  '#6366F1', // Indigo
-  '#84CC16', // Lime
-  '#F97316', // Orange
-];
-
-// Initial Categories
 const DEFAULT_CATEGORIES = [
-  { id: 'cat-work', name: 'Deep Work', color: '#3B82F6' },
-  { id: 'cat-fitness', name: 'Health & Fitness', color: '#10B981' },
-  { id: 'cat-learn', name: 'Learning & Dev', color: '#8B5CF6' },
-  { id: 'cat-meeting', name: 'Team Meetings', color: '#EC4899' },
-  { id: 'cat-admin', name: 'Admin & Email', color: '#F59E0B' },
-  { id: 'cat-leisure', name: 'Personal & Rest', color: '#14B8A6' },
+  { id: 'cat-g7', name: 'Grade 7', color: '#3B82F6' },       // Blue
+  { id: 'cat-g8', name: 'Grade 8', color: '#10B981' },    // Green
+  { id: 'cat-g9', name: 'Grade 9', color: '#F59E0B' },     // Amber
+  { id: 'cat-g10', name: 'Grade 10', color: '#8B5CF6' },   // Purple
+  { id: 'cat-syp', name: 'SYP', color: '#EC4899' }      // Pink
 ];
 
-// Sample Initial Activities with Multi-Tag categories
-const INITIAL_ACTIVITIES = [
-  {
-    id: 'act-1',
-    title: 'Sprint Planning & Kickoff',
-    date: '2026-01-20',
-    startTime: '08:00',
-    endTime: '09:30',
-    categoryIds: ['cat-meeting', 'cat-work'],
-    notes: 'Review goals for Q1 and assign initial development tickets.',
-  },
-  {
-    id: 'act-2',
-    title: 'Core Architecture Coding',
-    date: '2026-01-20',
-    startTime: '10:00',
-    endTime: '12:30',
-    categoryIds: ['cat-work'],
-    notes: 'Implement API routing layer and global state store.',
-  },
-  {
-    id: 'act-3',
-    title: 'Gym Workout & Cardio',
-    date: '2026-01-20',
-    startTime: '13:00',
-    endTime: '14:15',
-    categoryIds: ['cat-fitness', 'cat-leisure'],
-    notes: 'Leg day routine and 20 min high intensity cycling.',
-  },
-  {
-    id: 'act-4',
-    title: 'React 19 & Next.js Study',
-    date: '2026-01-21',
-    startTime: '07:00',
-    endTime: '08:30',
-    categoryIds: ['cat-learn', 'cat-work'],
-    notes: 'Explore Server Actions, useActionState, and Optimistic UI features.',
-  },
-  {
-    id: 'act-5',
-    title: 'Client Demo & Feedback',
-    date: '2026-01-21',
-    startTime: '09:00',
-    endTime: '10:30',
-    categoryIds: ['cat-meeting'],
-    notes: 'Present prototype wireframes to stakeholders for sign-off.',
-  },
-  {
-    id: 'act-6',
-    title: 'Inbox Zero & Documentation',
-    date: '2026-01-21',
-    startTime: '11:00',
-    endTime: '12:00',
-    categoryIds: ['cat-admin'],
-    notes: 'Clear pending emails and update internal team wiki.',
-  },
-  {
-    id: 'act-7',
-    title: 'UI Design System Review',
-    date: '2026-01-22',
-    startTime: '08:30',
-    endTime: '10:00',
-    categoryIds: ['cat-work', 'cat-learn'],
-    notes: 'Audit Tailwind color tokens and dark mode component specs.',
-  },
-  {
-    id: 'act-8',
-    title: 'Database Schema Migration',
-    date: '2026-01-22',
-    startTime: '10:00',
-    endTime: '12:00',
-    categoryIds: ['cat-work'],
-    notes: 'Optimize indexes and run benchmark scripts on staging environment.',
-  },
-  {
-    id: 'act-9',
-    title: 'Yoga & Mindfulness',
-    date: '2026-01-23',
-    startTime: '06:30',
-    endTime: '07:30',
-    categoryIds: ['cat-fitness'],
-    notes: 'Morning stretch and breathing exercise session.',
-  },
-  {
-    id: 'act-10',
-    title: 'Code Review & Refactoring',
-    date: '2026-01-23',
-    startTime: '13:30',
-    endTime: '15:45',
-    categoryIds: ['cat-work', 'cat-admin'],
-    notes: 'Review pull requests for batch selection and modal components.',
-  },
-  {
-    id: 'act-11',
-    title: 'Weekend Reading & Rest',
-    date: '2026-01-24',
-    startTime: '09:00',
-    endTime: '11:30',
-    categoryIds: ['cat-leisure', 'cat-learn'],
-    notes: 'Read technical whitepapers and enjoy morning coffee.',
-  },
-  {
-    id: 'act-12',
-    title: 'Weekly Retrospective',
-    date: '2026-01-26',
-    startTime: '16:00',
-    endTime: '17:30',
-    categoryIds: ['cat-meeting', 'cat-admin'],
-    notes: 'Discuss sprint accomplishments and team retro points.',
-  }
-];
-
-// Hex color to RGBA string converter
-const hexToRgba = (hex, alpha = 0.3) => {
-  if (!hex) return `rgba(100, 116, 139, ${alpha})`;
-  let c = hex.replace('#', '');
-  if (c.length === 3) c = c.split('').map((x) => x + x).join('');
-  const num = parseInt(c, 16);
-  if (isNaN(num)) return `rgba(100, 116, 139, ${alpha})`;
-  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+const DEFAULT_SCHEDULE_META = {
+  title: 'YMSAT 2027 Schedule',
+  startDate: '2027-01-20',
+  endDate: '2027-01-27',
+  startTime: '06:00',
+  endTime: '18:00'
 };
 
-// Generates dynamic background style (solid or multi-tag diagonal striped gradient)
-const getMultiTagBackground = (categoryIds = [], categoryMap, isDark) => {
-  const validCategories = (categoryIds || [])
-    .map((id) => categoryMap[id])
+const DEFAULT_ACTIVITIES = [
+  {
+    id: 'act-1',
+    title: 'YMSAT Preps',
+    date: '2027-01-20',
+    startTime: '13:30',
+    endTime: '16:30',
+    categoryIds: ['cat-g7', 'cat-g8', 'cat-g9', 'cat-g10'],
+    notes: 'Not required.'
+  },
+];
+
+// Method 2: Encoding schedule into URL safe string
+const encodeScheduleToURL = (scheduleMeta, categories, activities) => {
+  try {
+    const payload = {
+      meta: scheduleMeta,
+      cats: categories,
+      acts: activities,
+      v: 1
+    };
+    const jsonStr = JSON.stringify(payload);
+    const encoded = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+      return String.fromCharCode('0x' + p1);
+    }));
+    return encoded;
+  } catch (err) {
+    console.error('Encoding failed:', err);
+    return null;
+  }
+};
+
+const decodeScheduleFromURL = (encodedStr) => {
+  try {
+    const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(encodedStr), (c) => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    console.error('Decoding failed:', err);
+    return null;
+  }
+};
+
+const getCategoryStyle = (categoryIds, categories) => {
+  if (!categoryIds || categoryIds.length === 0) {
+    return { background: '#6B7280', color: '#FFFFFF' };
+  }
+
+  const matchedColors = categoryIds
+    .map(id => categories.find(c => c.id === id)?.color)
     .filter(Boolean);
 
-  if (validCategories.length === 0) {
+  if (matchedColors.length === 0) {
+    return { background: '#6B7280', color: '#FFFFFF' };
+  }
+
+  if (matchedColors.length === 1) {
     return {
-      background: isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.8)',
-      borderColor: '#94a3b8',
+      background: matchedColors[0],
+      color: '#FFFFFF'
     };
   }
 
-  if (validCategories.length === 1) {
-    const cat = validCategories[0];
-    const bgOpacity = isDark ? 0.35 : 0.22;
-    return {
-      backgroundColor: hexToRgba(cat.color, bgOpacity),
-      borderColor: cat.color,
-    };
-  }
-
-  // Multiple Tags -> Create repeating diagonal striped CSS linear gradient
-  const stripeWidth = 16;
-  const colorStops = [];
-  validCategories.forEach((cat, idx) => {
-    const startPx = idx * stripeWidth;
-    const endPx = (idx + 1) * stripeWidth;
-    const rgbaColor = hexToRgba(cat.color, isDark ? 0.45 : 0.28);
-    colorStops.push(`${rgbaColor} ${startPx}px`);
-    colorStops.push(`${rgbaColor} ${endPx}px`);
+  // Multi-tag striped gradient generator using repeating linear gradient
+  const stripeWidth = 24; // px per color stripe
+  let gradientStops = [];
+  matchedColors.forEach((color, index) => {
+    const start = index * stripeWidth;
+    const end = (index + 1) * stripeWidth;
+    gradientStops.push(`${color} ${start}px`, `${color} ${end}px`);
   });
 
+  const totalWidth = matchedColors.length * stripeWidth;
+  const gradientCss = `repeating-linear-gradient(135deg, ${gradientStops.join(', ')})`;
+
   return {
-    background: `repeating-linear-gradient(-45deg, ${colorStops.join(', ')})`,
-    borderColor: validCategories[0].color,
+    backgroundImage: gradientCss,
+    backgroundSize: `${totalWidth * 1.414}px ${totalWidth * 1.414}px`,
+    color: '#FFFFFF'
   };
 };
 
-// Time Conversion Helpers
 const timeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
-  const [hrs, mins] = timeStr.split(':').map(Number);
-  return hrs * 60 + mins;
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
 };
 
 const minutesToTime = (totalMinutes) => {
-  const hrs = Math.floor(totalMinutes / 60);
-  const mins = Math.round(totalMinutes % 60);
-  const formattedHrs = String(hrs).padStart(2, '0');
-  const formattedMins = String(mins).padStart(2, '0');
-  return `${formattedHrs}:${formattedMins}`;
+  const h = Math.floor(totalMinutes / 60).toString().padStart(2, '0');
+  const m = (totalMinutes % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
 };
 
 const formatDisplayTime = (timeStr) => {
   if (!timeStr) return '';
   const [h, m] = timeStr.split(':').map(Number);
   const period = h >= 12 ? 'PM' : 'AM';
-  const displayHour = h % 12 === 0 ? 12 : h % 12;
-  const displayMin = String(m).padStart(2, '0');
-  return `${displayHour}:${displayMin} ${period}`;
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  return `${displayH}:${m.toString().padStart(2, '0')} ${period}`;
 };
 
-// Date Range Generator
 const getDatesInRange = (startDateStr, endDateStr) => {
   const dates = [];
   let current = new Date(startDateStr + 'T00:00:00');
   const end = new Date(endDateStr + 'T00:00:00');
 
-  if (isNaN(current.getTime()) || isNaN(end.getTime()) || current > end) {
-    return [startDateStr];
-  }
-
   while (current <= end) {
-    const yyyy = current.getFullYear();
-    const mm = String(current.getMonth() + 1).padStart(2, '0');
-    const dd = String(current.getDate()).padStart(2, '0');
-    dates.push(`${yyyy}-${mm}-${dd}`);
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const day = String(current.getDate()).padStart(2, '0');
+    dates.push(`${year}-${month}-${day}`);
     current.setDate(current.getDate() + 1);
   }
   return dates;
 };
 
-const formatDateLabel = (dateStr) => {
-  if (!dateStr) return { dayName: '', formattedDate: '', fullFormattedDate: '' };
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const dateObj = new Date(year, month - 1, day);
-  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-  const fullDayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-  const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
-  const fullMonthName = dateObj.toLocaleDateString('en-US', { month: 'long' });
-  return {
-    dayName,
-    fullDayName,
-    formattedDate: `${monthName} ${day}`,
-    fullFormattedDate: `${fullMonthName} ${day}, ${year}`,
-  };
-};
-
-const calculateOverlaps = (activities) => {
-  if (!activities || activities.length === 0) return [];
-
-  const sorted = [...activities]
-    .map((act) => ({
-      ...act,
-      startMins: timeToMinutes(act.startTime),
-      endMins: timeToMinutes(act.endTime),
-    }))
-    .sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
-
-  const clusters = [];
-  let currentCluster = [];
-  let clusterEnd = -1;
-
-  sorted.forEach((item) => {
-    if (currentCluster.length === 0) {
-      currentCluster.push(item);
-      clusterEnd = item.endMins;
-    } else if (item.startMins < clusterEnd) {
-      currentCluster.push(item);
-      if (item.endMins > clusterEnd) clusterEnd = item.endMins;
-    } else {
-      clusters.push(currentCluster);
-      currentCluster = [item];
-      clusterEnd = item.endMins;
-    }
-  });
-  if (currentCluster.length > 0) {
-    clusters.push(currentCluster);
-  }
-
-  const result = [];
-  clusters.forEach((cluster) => {
-    const columns = [];
-    cluster.forEach((item) => {
-      let assignedCol = -1;
-      for (let i = 0; i < columns.length; i++) {
-        if (columns[i] <= item.startMins) {
-          assignedCol = i;
-          columns[i] = item.endMins;
-          break;
-        }
-      }
-      if (assignedCol === -1) {
-        assignedCol = columns.length;
-        columns.push(item.endMins);
-      }
-      item.columnIndex = assignedCol;
-    });
-
-    const totalCols = columns.length;
-    cluster.forEach((item) => {
-      item.totalColumns = totalCols;
-      result.push(item);
-    });
-  });
-
-  return result;
-};
-
 export default function App() {
-  // Persistence state
-  const [activities, setActivities] = useState(() => {
-    const saved = localStorage.getItem('planner_activities_v2');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Normalize backward compatibility for single categoryId
-        return parsed.map((act) => ({
-          ...act,
-          categoryIds: act.categoryIds || (act.categoryId ? [act.categoryId] : []),
-        }));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return INITIAL_ACTIVITIES;
-  });
+  // --- Core Schedule States ---
+  const [scheduleMeta, setScheduleMeta] = useState(DEFAULT_SCHEDULE_META);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [activities, setActivities] = useState(DEFAULT_ACTIVITIES);
 
-  const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem('planner_categories_v2');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return DEFAULT_CATEGORIES;
-  });
-
-  // Schedule Title & Configurable Date Range
-  const [scheduleTitle, setScheduleTitle] = useState(() => {
-    return localStorage.getItem('planner_title') || 'Jan 20 - Jan 27, 2026 Schedule';
-  });
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-
-  const [startDate, setStartDate] = useState(() => localStorage.getItem('planner_start_date') || '2026-01-20');
-  const [endDate, setEndDate] = useState(() => localStorage.getItem('planner_end_date') || '2026-01-27');
-  const [startHour, setStartHour] = useState(DEFAULT_START_HOUR);
-  const [endHour, setEndHour] = useState(DEFAULT_END_HOUR);
-
-  // App UI Controls
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryFilters, setActiveCategoryFilters] = useState([]);
+  // --- Theme State ---
   const [darkMode, setDarkMode] = useState(false);
 
-  // Single Day Pop-up View state
-  const [selectedDayView, setSelectedDayView] = useState(null);
+  // --- Shared Link (Method 2) State ---
+  const [isViewingSharedUrl, setIsViewingSharedUrl] = useState(false);
+  const [sharedSourceData, setSharedSourceData] = useState(null);
 
-  // Batch Select & Delete Mode
-  const [isBatchMode, setIsBatchMode] = useState(false);
-  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // Modals
-  const [editingActivity, setEditingActivity] = useState(null);
-  const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [showDateSettings, setShowDateSettings] = useState(false);
-
-  // Drag & Drop / Resize state
-  const [dragState, setDragState] = useState(null);
-  const mainGridRef = useRef(null);
-
-  // Derived Grid Metrics
-  const gridStartMins = startHour * 60;
-  const gridEndMins = endHour * 60;
-  const totalMinutes = Math.max(60, gridEndMins - gridStartMins);
-  const totalHours = Math.ceil(totalMinutes / 60);
-
-  const mainGridHeight = totalHours * MAIN_HOUR_HEIGHT;
-  const dayViewGridHeight = totalHours * DAY_VIEW_HOUR_HEIGHT;
-
-  // Schedule Dates array
-  const scheduleDates = useMemo(() => {
-    return getDatesInRange(startDate, endDate);
-  }, [startDate, endDate]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_activities_v2', JSON.stringify(activities));
-  }, [activities]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_categories_v2', JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_title', scheduleTitle);
-  }, [scheduleTitle]);
-
-  useEffect(() => {
-    localStorage.setItem('planner_start_date', startDate);
-    localStorage.setItem('planner_end_date', endDate);
-  }, [startDate, endDate]);
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  // --- Cloud Sync (Method 3) Firebase Config & Sync State ---
+  const [userFirebaseConfig, setUserFirebaseConfig] = useState(() => {
+    try {
+      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        return typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+      }
+      const savedConfig = localStorage.getItem('flexi_firebase_config');
+      return savedConfig ? JSON.parse(savedConfig) : null;
+    } catch (e) {
+      return null;
     }
-  }, [darkMode]);
+  });
 
-  const categoryMap = useMemo(() => {
-    const map = {};
-    categories.forEach((cat) => {
-      map[cat.id] = cat;
-    });
-    return map;
-  }, [categories]);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('local'); // 'connected', 'syncing', 'error', 'local'
+  const [cloudUserId, setCloudUserId] = useState(null);
+  const [firebaseInstances, setFirebaseInstances] = useState(null);
 
-  const filteredActivities = useMemo(() => {
-    return activities.filter((act) => {
-      const matchesSearch =
-        act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (act.notes && act.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+  // --- UI Interactive States ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  
+  // --- Active Modals ---
+  const [activeModal, setActiveModal] = useState(null); // 'activity', 'categories', 'share', 'cloud', 'analytics', 'dayView', 'batchDelete', 'settings', 'import'
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [selectedDayForView, setSelectedDayForView] = useState(null);
 
-      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
-      const matchesCategory =
-        activeCategoryFilters.length === 0 ||
-        actCatIds.some((id) => activeCategoryFilters.includes(id));
+  // --- Form Input States ---
+  const [activityForm, setActivityForm] = useState({
+    title: '',
+    date: '2026-01-20',
+    startTime: '09:00',
+    endTime: '10:00',
+    categoryIds: [],
+    notes: ''
+  });
 
-      return matchesSearch && matchesCategory;
-    });
-  }, [activities, searchQuery, activeCategoryFilters]);
+  const [firebaseConfigText, setFirebaseConfigText] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
 
-  const handleMouseDown = (e, activity, type, viewType = 'main') => {
-    if (isBatchMode) return;
-    e.stopPropagation();
-
-    const hourHeight = viewType === 'dayView' ? DAY_VIEW_HOUR_HEIGHT : MAIN_HOUR_HEIGHT;
-
-    setDragState({
-      id: activity.id,
-      type, // 'move', 'resize-top', 'resize-bottom'
-      startY: e.clientY,
-      startX: e.clientX,
-      initialStart: timeToMinutes(activity.startTime),
-      initialEnd: timeToMinutes(activity.endTime),
-      initialDate: activity.date,
-      currentDate: activity.date,
-      viewType,
-      hourHeight,
-    });
+  const showToast = (text, type = 'info') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
   };
 
   useEffect(() => {
-    if (!dragState) return;
-
-    const handleMouseMove = (e) => {
-      const deltaY = e.clientY - dragState.startY;
-      const hourH = dragState.hourHeight;
-      // Convert pixel delta to 5-minute snapped intervals
-      const minutesDelta = Math.round(((deltaY / hourH) * 60) / 5) * 5;
-
-      let targetDate = dragState.currentDate;
-
-      // Handle Horizontal Date Column Switch in Main View
-      if (dragState.type === 'move' && dragState.viewType === 'main' && mainGridRef.current) {
-        const gridRect = mainGridRef.current.getBoundingClientRect();
-        const timeColWidth = 80;
-        const availableWidth = gridRect.width - timeColWidth;
-        const colWidth = availableWidth / scheduleDates.length;
-
-        const relativeX = e.clientX - gridRect.left - timeColWidth;
-        const targetColIdx = Math.max(0, Math.min(scheduleDates.length - 1, Math.floor(relativeX / colWidth)));
-
-        if (scheduleDates[targetColIdx]) {
-          targetDate = scheduleDates[targetColIdx];
+    const checkUrlHash = () => {
+      const hash = window.location.hash;
+      if (hash && hash.includes('share=')) {
+        const encodedData = hash.split('share=')[1];
+        const decoded = decodeScheduleFromURL(encodedData);
+        if (decoded && decoded.meta && decoded.acts) {
+          setIsViewingSharedUrl(true);
+          setSharedSourceData(decoded);
+          setScheduleMeta(decoded.meta);
+          setCategories(decoded.cats || DEFAULT_CATEGORIES);
+          setActivities(decoded.acts || []);
+          showToast('Loaded shared schedule from link!', 'success');
+        } else {
+          showToast('Invalid shared link data.', 'error');
         }
       }
-
-      setActivities((prev) =>
-        prev.map((act) => {
-          if (act.id !== dragState.id) return act;
-
-          let newStart = dragState.initialStart;
-          let newEnd = dragState.initialEnd;
-          const duration = dragState.initialEnd - dragState.initialStart;
-
-          if (dragState.type === 'move') {
-            newStart = Math.max(
-              gridStartMins,
-              Math.min(gridEndMins - duration, dragState.initialStart + minutesDelta)
-            );
-            newEnd = newStart + duration;
-          } else if (dragState.type === 'resize-top') {
-            newStart = Math.max(
-              gridStartMins,
-              Math.min(dragState.initialEnd - 15, dragState.initialStart + minutesDelta)
-            );
-          } else if (dragState.type === 'resize-bottom') {
-            newEnd = Math.min(
-              gridEndMins,
-              Math.max(dragState.initialStart + 15, dragState.initialEnd + minutesDelta)
-            );
-          }
-
-          return {
-            ...act,
-            date: targetDate,
-            startTime: minutesToTime(newStart),
-            endTime: minutesToTime(newEnd),
-          };
-        })
-      );
     };
 
-    const handleMouseUp = () => {
-      setDragState(null);
-    };
+    checkUrlHash();
+    window.addEventListener('hashchange', checkUrlHash);
+    return () => window.removeEventListener('hashchange', checkUrlHash);
+  }, []);
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  useEffect(() => {
+    if (!userFirebaseConfig || !userFirebaseConfig.apiKey) {
+      setCloudSyncStatus('local');
+      return;
+    }
 
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [dragState, scheduleDates, gridStartMins, gridEndMins]);
+    try {
+      setCloudSyncStatus('syncing');
+      const existingApps = getApps();
+      const app = existingApps.length > 0 ? existingApps[0] : initializeApp(userFirebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
 
-  const handleGridCellClick = (dateStr, clickedMinute) => {
-    if (isBatchMode) return;
-    const snappedStart = Math.round(clickedMinute / 5) * 5;
-    const snappedEnd = Math.min(gridEndMins, snappedStart + 60);
+      setFirebaseInstances({ app, auth, db });
 
-    setEditingActivity({
-      id: 'act-' + Date.now(),
-      title: 'New Activity',
-      date: dateStr,
-      startTime: minutesToTime(snappedStart),
-      endTime: minutesToTime(snappedEnd),
-      categoryIds: [categories[0]?.id || 'cat-work'],
-      notes: '',
-      isNew: true,
+      // Authenticate
+      const handleAuth = async () => {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      };
+
+      handleAuth().catch(err => console.warn('Firebase Auth warning:', err));
+
+      const unsubAuth = onAuthStateChanged(auth, (usr) => {
+        if (usr) {
+          setCloudUserId(usr.uid);
+          
+          // Setup real-time listener for schedule doc
+          const appId = typeof __app_id !== 'undefined' ? __app_id : 'shared-flexi-schedule';
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedule_data');
+
+          const unsubSnapshot = onSnapshot(docRef, 
+            (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.meta) setScheduleMeta(data.meta);
+                if (data.categories) setCategories(data.categories);
+                if (data.activities) setActivities(data.activities);
+              }
+              setCloudSyncStatus('connected');
+            },
+            (err) => {
+              console.error('Firestore listener error:', err);
+              setCloudSyncStatus('error');
+            }
+          );
+
+          return () => unsubSnapshot();
+        } else {
+          setCloudSyncStatus('local');
+        }
+      });
+
+      return () => unsubAuth();
+    } catch (err) {
+      console.error('Firebase initialization error:', err);
+      setCloudSyncStatus('error');
+    }
+  }, [userFirebaseConfig]);
+
+  const saveToCloud = async (newMeta, newCats, newActs) => {
+    if (!firebaseInstances || !firebaseInstances.db || cloudSyncStatus === 'local') return;
+
+    try {
+      setCloudSyncStatus('syncing');
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'shared-flexi-schedule';
+      const docRef = doc(firebaseInstances.db, 'artifacts', appId, 'public', 'data', 'schedule_data');
+
+      await setDoc(docRef, {
+        meta: newMeta || scheduleMeta,
+        categories: newCats || categories,
+        activities: newActs || activities,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      setCloudSyncStatus('connected');
+    } catch (err) {
+      console.error('Cloud save failed:', err);
+      setCloudSyncStatus('error');
+    }
+  };
+
+  const updateActivitiesState = (updater) => {
+    setActivities(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (!isViewingSharedUrl) {
+        saveToCloud(scheduleMeta, categories, next);
+      }
+      return next;
     });
+  };
+
+  const updateScheduleMetaState = (updater) => {
+    setScheduleMeta(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (!isViewingSharedUrl) {
+        saveToCloud(next, categories, activities);
+      }
+      return next;
+    });
+  };
+
+  const updateCategoriesState = (updater) => {
+    setCategories(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (!isViewingSharedUrl) {
+        saveToCloud(scheduleMeta, next, activities);
+      }
+      return next;
+    });
+  };
+
+  const filteredActivities = useMemo(() => {
+    if (!searchQuery.trim()) return activities;
+    const q = searchQuery.toLowerCase();
+    return activities.filter(act => {
+      const matchesTitle = act.title.toLowerCase().includes(q);
+      const matchesNotes = act.notes && act.notes.toLowerCase().includes(q);
+      const matchesCat = act.categoryIds.some(cid => {
+        const cat = categories.find(c => c.id === cid);
+        return cat && cat.name.toLowerCase().includes(q);
+      });
+      return matchesTitle || matchesNotes || matchesCat;
+    });
+  }, [activities, searchQuery, categories]);
+
+  const dateColumns = useMemo(() => {
+    return getDatesInRange(scheduleMeta.startDate, scheduleMeta.endDate);
+  }, [scheduleMeta.startDate, scheduleMeta.endDate]);
+
+  const gridStartMins = useMemo(() => timeToMinutes(scheduleMeta.startTime), [scheduleMeta.startTime]);
+  const gridEndMins = useMemo(() => timeToMinutes(scheduleMeta.endTime), [scheduleMeta.endTime]);
+  const totalGridMins = useMemo(() => Math.max(60, gridEndMins - gridStartMins), [gridEndMins, gridStartMins]);
+
+  const timeSlots = useMemo(() => {
+    const slots = [];
+    for (let m = gridStartMins; m <= gridEndMins; m += 60) {
+      slots.push(minutesToTime(m));
+    }
+    return slots;
+  }, [gridStartMins, gridEndMins]);
+
+  const handleOpenAddModal = (defaultDate = scheduleMeta.startDate) => {
+    setEditingActivity(null);
+    setActivityForm({
+      title: '',
+      date: defaultDate,
+      startTime: '09:00',
+      endTime: '10:00',
+      categoryIds: [categories[0]?.id || 'cat-work'],
+      notes: ''
+    });
+    setActiveModal('activity');
+  };
+
+  const handleOpenEditModal = (act) => {
+    setEditingActivity(act);
+    setActivityForm({
+      title: act.title,
+      date: act.date,
+      startTime: act.startTime,
+      endTime: act.endTime,
+      categoryIds: [...act.categoryIds],
+      notes: act.notes || ''
+    });
+    setActiveModal('activity');
+  };
+
+  const handleSaveActivity = (e) => {
+    e.preventDefault();
+    if (!activityForm.title.trim()) {
+      showToast('Please enter an activity title', 'error');
+      return;
+    }
+    if (timeToMinutes(activityForm.endTime) <= timeToMinutes(activityForm.startTime)) {
+      showToast('End time must be after start time', 'error');
+      return;
+    }
+
+    if (editingActivity) {
+      updateActivitiesState(prev => prev.map(a => a.id === editingActivity.id ? {
+        ...a,
+        title: activityForm.title,
+        date: activityForm.date,
+        startTime: activityForm.startTime,
+        endTime: activityForm.endTime,
+        categoryIds: activityForm.categoryIds,
+        notes: activityForm.notes
+      } : a));
+      showToast('Activity updated successfully!', 'success');
+    } else {
+      const newAct = {
+        id: 'act-' + Date.now(),
+        title: activityForm.title,
+        date: activityForm.date,
+        startTime: activityForm.startTime,
+        endTime: activityForm.endTime,
+        categoryIds: activityForm.categoryIds,
+        notes: activityForm.notes
+      };
+      updateActivitiesState(prev => [...prev, newAct]);
+      showToast('Activity created successfully!', 'success');
+    }
+    setActiveModal(null);
+  };
+
+  const handleDeleteSingleActivity = (id) => {
+    updateActivitiesState(prev => prev.filter(a => a.id !== id));
+    showToast('Activity removed', 'info');
   };
 
   const toggleSelectActivity = (id) => {
-    setSelectedActivityIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    setSelectedActivityIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
   };
 
   const handleSelectAll = () => {
-    setSelectedActivityIds(filteredActivities.map((a) => a.id));
+    setSelectedActivityIds(filteredActivities.map(a => a.id));
   };
 
   const handleDeselectAll = () => {
     setSelectedActivityIds([]);
   };
 
-  const handleBatchDeleteConfirm = () => {
-    setActivities((prev) => prev.filter((act) => !selectedActivityIds.includes(act.id)));
+  const handleConfirmBatchDelete = () => {
+    updateActivitiesState(prev => prev.filter(a => !selectedActivityIds.includes(a.id)));
+    showToast(`Deleted ${selectedActivityIds.length} activities`, 'success');
     setSelectedActivityIds([]);
-    setShowDeleteConfirm(false);
-    setIsBatchMode(false);
+    setActiveModal(null);
   };
 
-  const exportJSON = () => {
-    const dataStr =
-      'data:text/json;charset=utf-8,' +
-      encodeURIComponent(
-        JSON.stringify({ title: scheduleTitle, startDate, endDate, activities, categories }, null, 2)
-      );
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute(
-      'download',
-      `schedule_planner_${new Date().toISOString().slice(0, 10)}.json`
-    );
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
+  const [generatedShareUrl, setGeneratedShareUrl] = useState('');
 
-  const exportCSV = () => {
-    let csv = 'ID,Title,Date,Start Time,End Time,Categories/Tags,Notes\n';
-    activities.forEach((act) => {
-      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
-      const tagNames = actCatIds.map((id) => categoryMap[id]?.name || 'Uncategorized').join('; ');
-      const cleanNotes = (act.notes || '').replace(/"/g, '""');
-      csv += `"${act.id}","${act.title}","${act.date}","${act.startTime}","${act.endTime}","${tagNames}","${cleanNotes}"\n`;
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `schedule_planner_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const importJSON = (e) => {
-    const fileReader = new FileReader();
-    if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], 'UTF-8');
-      fileReader.onload = (evt) => {
-        try {
-          const parsed = JSON.parse(evt.target.result);
-          if (parsed.activities) setActivities(parsed.activities);
-          if (parsed.categories) setCategories(parsed.categories);
-          if (parsed.title) setScheduleTitle(parsed.title);
-          if (parsed.startDate) setStartDate(parsed.startDate);
-          if (parsed.endDate) setEndDate(parsed.endDate);
-        } catch (err) {
-          console.error('Invalid JSON file format', err);
-        }
-      };
+  const handleGenerateShareLink = () => {
+    const encoded = encodeScheduleToURL(scheduleMeta, categories, activities);
+    if (encoded) {
+      const fullUrl = `${window.location.origin}${window.location.pathname}#share=${encoded}`;
+      setGeneratedShareUrl(fullUrl);
+      setActiveModal('share');
+    } else {
+      showToast('Failed to encode schedule data', 'error');
     }
   };
 
-  // Analytics computation (split multi-tag time proportionally)
-  const categoryAnalytics = useMemo(() => {
-    const totals = {};
-    let grandTotalMins = 0;
+  const handleCopyShareLink = () => {
+    navigator.clipboard.writeText(generatedShareUrl);
+    showToast('Shareable link copied to clipboard!', 'success');
+  };
 
-    categories.forEach((cat) => {
-      totals[cat.id] = { ...cat, totalMinutes: 0, count: 0 };
-    });
+  const handleImportSharedToCloud = () => {
+    setIsViewingSharedUrl(false);
+    window.location.hash = '';
+    saveToCloud(scheduleMeta, categories, activities);
+    showToast('Shared schedule imported into your main workspace!', 'success');
+  };
 
-    activities.forEach((act) => {
-      const start = timeToMinutes(act.startTime);
-      const end = timeToMinutes(act.endTime);
-      const duration = Math.max(0, end - start);
-      grandTotalMins += duration;
+  const handleExitSharedMode = () => {
+    setIsViewingSharedUrl(false);
+    window.location.hash = '';
+    showToast('Exited shared view mode', 'info');
+  };
 
-      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
-      if (actCatIds.length > 0) {
-        const splitDuration = duration / actCatIds.length;
-        actCatIds.forEach((catId) => {
-          if (totals[catId]) {
-            totals[catId].totalMinutes += splitDuration;
-            totals[catId].count += 1;
+  const handleSaveFirebaseConfig = (e) => {
+    e.preventDefault();
+    try {
+      let parsed = null;
+      if (firebaseConfigText.trim().startsWith('{')) {
+        parsed = JSON.parse(firebaseConfigText);
+      } else {
+        showToast('Invalid Firebase JSON format', 'error');
+        return;
+      }
+      localStorage.setItem('flexi_firebase_config', JSON.stringify(parsed));
+      setUserFirebaseConfig(parsed);
+      setActiveModal(null);
+      showToast('Firebase configuration updated!', 'success');
+    } catch (err) {
+      showToast('Error parsing Firebase configuration', 'error');
+    }
+  };
+
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#3B82F6');
+
+  const handleAddCategory = (e) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    const newCat = {
+      id: 'cat-' + Date.now(),
+      name: newCatName.trim(),
+      color: newCatColor
+    };
+    updateCategoriesState(prev => [...prev, newCat]);
+    setNewCatName('');
+    showToast('Category created!', 'success');
+  };
+
+  const handleDeleteCategory = (id) => {
+    if (categories.length <= 1) {
+      showToast('At least one category must remain', 'error');
+      return;
+    }
+    updateCategoriesState(prev => prev.filter(c => c.id !== id));
+    // Remove deleted category ID from activities
+    updateActivitiesState(prev => prev.map(a => ({
+      ...a,
+      categoryIds: a.categoryIds.filter(cid => cid !== id)
+    })));
+    showToast('Category removed', 'info');
+  };
+
+  const analyticsData = useMemo(() => {
+    let totalMins = 0;
+    const catMins = {};
+
+    categories.forEach(c => { catMins[c.id] = 0; });
+
+    activities.forEach(act => {
+      const dur = Math.max(0, timeToMinutes(act.endTime) - timeToMinutes(act.startTime));
+      totalMins += dur;
+
+      if (act.categoryIds && act.categoryIds.length > 0) {
+        const share = dur / act.categoryIds.length;
+        act.categoryIds.forEach(cid => {
+          if (catMins[cid] !== undefined) {
+            catMins[cid] += share;
           }
         });
       }
     });
 
-    return Object.values(totals).map((item) => ({
-      ...item,
-      hours: (item.totalMinutes / 60).toFixed(1),
-      percentage: grandTotalMins > 0 ? Math.round((item.totalMinutes / grandTotalMins) * 100) : 0,
-    }));
+    return {
+      totalHours: (totalMins / 60).toFixed(1),
+      totalActivities: activities.length,
+      categoryBreakdown: categories.map(c => ({
+        ...c,
+        hours: (catMins[c.id] / 60).toFixed(1),
+        percentage: totalMins > 0 ? Math.round((catMins[c.id] / totalMins) * 100) : 0
+      }))
+    };
   }, [activities, categories]);
 
+  const handleExportJSON = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+      meta: scheduleMeta,
+      categories,
+      activities
+    }, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `${scheduleMeta.title.replace(/\s+/g, '_')}_backup.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    showToast('Backup JSON exported successfully!', 'success');
+  };
+
+  const handleImportJSON = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (parsed.meta) setScheduleMeta(parsed.meta);
+        if (parsed.categories) setCategories(parsed.categories);
+        if (parsed.activities) setActivities(parsed.activities);
+        saveToCloud(parsed.meta, parsed.categories, parsed.activities);
+        showToast('Schedule imported from backup JSON!', 'success');
+        setActiveModal(null);
+      } catch (err) {
+        showToast('Invalid JSON file format', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
-    <div
-      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
-        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'
-      }`}
-    >
-      <header
-        className={`border-b sticky top-0 z-30 backdrop-blur-md ${
-          darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'
-        }`}
-      >
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          {/* Logo & Editable Title */}
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-md shadow-indigo-500/20">
-              <Calendar className="w-6 h-6" />
+    <div className={`min-h-screen ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'} transition-colors duration-200 font-sans pb-12`}>
+      
+      {/* Toast Notification Floating Banner */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-lg shadow-xl text-white font-medium text-sm transition-all animate-bounce ${
+          toastMessage.type === 'error' ? 'bg-red-600' : toastMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
+        }`}>
+          {toastMessage.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
+      {/* Shared Link Mode Top Notice Banner (Method 2) */}
+      {isViewingSharedUrl && (
+        <div className="bg-amber-500 text-slate-900 px-4 py-2.5 text-sm font-semibold flex flex-wrap items-center justify-between shadow-md">
+          <div className="flex items-center space-x-2">
+            <Eye size={18} className="animate-pulse" />
+            <span>You are viewing a shared link schedule: <strong>"{scheduleMeta.title}"</strong></span>
+          </div>
+          <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+            <button
+              onClick={handleImportSharedToCloud}
+              className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1 rounded-md text-xs transition flex items-center space-x-1"
+            >
+              <Cloud size={14} />
+              <span>Import to My Workspace</span>
+            </button>
+            <button
+              onClick={handleExitSharedMode}
+              className="bg-amber-600 hover:bg-amber-700 text-slate-900 px-3 py-1 rounded-md text-xs transition"
+            >
+              Exit View
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Header & Navbar */}
+      <header className={`border-b ${darkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3.5 shadow-sm`}>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          
+          {/* Logo & Title & Cloud Indicator */}
+          <div className="flex items-center justify-between md:justify-start space-x-4">
+            <div className="flex items-center space-x-2.5">
+              <div className="bg-blue-600 p-2 rounded-xl text-white shadow-md shadow-blue-500/20">
+                <Calendar size={22} />
+              </div>
+              <div>
+                <h1 className="font-bold text-lg leading-tight">{scheduleMeta.title}</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {scheduleMeta.startDate} to {scheduleMeta.endDate}
+                </p>
+              </div>
             </div>
 
-            <div>
-              {isEditingTitle ? (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={scheduleTitle}
-                    onChange={(e) => setScheduleTitle(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingTitle(false)}
-                    autoFocus
-                    className={`font-bold text-base md:text-lg px-2 py-0.5 rounded border outline-none ${
-                      darkMode ? 'bg-slate-800 border-indigo-500 text-white' : 'bg-slate-100 border-indigo-500 text-slate-900'
-                    }`}
-                  />
-                  <button
-                    onClick={() => setIsEditingTitle(false)}
-                    className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                </div>
+            {/* Cloud Sync Status Indicator Pill (Method 3) */}
+            <button
+              onClick={() => setActiveModal('cloud')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                cloudSyncStatus === 'connected'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                  : cloudSyncStatus === 'syncing'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                  : cloudSyncStatus === 'error'
+                  ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800'
+                  : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+              }`}
+              title="Click to configure Cloud Database Sync"
+            >
+              {cloudSyncStatus === 'connected' ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <Cloud size={14} className="text-emerald-500" />
+                  <span className="hidden sm:inline">Cloud Synced</span>
+                </>
+              ) : cloudSyncStatus === 'syncing' ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin text-blue-500" />
+                  <span className="hidden sm:inline">Syncing...</span>
+                </>
               ) : (
-                <h1
-                  onClick={() => setIsEditingTitle(true)}
-                  className="font-bold text-lg leading-tight tracking-tight flex items-center gap-2 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 group"
-                  title="Click to edit Schedule Title"
-                >
-                  {scheduleTitle}
-                  <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
-                </h1>
+                <>
+                  <CloudOff size={14} className="text-slate-400" />
+                  <span className="hidden sm:inline">Local Mode</span>
+                </>
               )}
+            </button>
+          </div>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <span>{scheduleDates.length} Days View</span> •
+          {/* Search Filter & Control Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            
+            {/* Search Input Filter */}
+            <div className="relative flex-1 sm:w-48 md:w-56">
+              <input
+                type="text"
+                placeholder="Filter activities..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-100 border-slate-200 text-slate-800'
+                }`}
+              />
+              <Filter size={14} className="absolute left-2.5 top-2 text-slate-400" />
+              {searchQuery && (
                 <button
-                  onClick={() => setShowDateSettings(true)}
-                  className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
                 >
-                  <Sliders className="w-3 h-3" /> Change Range & Window
+                  <X size={12} />
                 </button>
-              </p>
+              )}
             </div>
-          </div>
 
-          {/* Search Box */}
-          <div className="flex-1 max-w-xs relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search activities or notes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-8 py-1.5 text-xs font-medium rounded-xl border outline-none transition-all ${
-                darkMode
-                  ? 'bg-slate-800 border-slate-700 focus:border-indigo-500 text-slate-100 placeholder-slate-500'
-                  : 'bg-slate-100 border-slate-200 focus:border-indigo-500 text-slate-800 placeholder-slate-400'
-              }`}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Action Toolbar */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Batch Select Toggle */}
+            {/* Quick Actions */}
             <button
-              onClick={() => {
-                setIsBatchMode(!isBatchMode);
-                setSelectedActivityIds([]);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 ${
-                isBatchMode
-                  ? 'bg-rose-500 text-white border-rose-600 shadow-md shadow-rose-500/20'
-                  : darkMode
-                  ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-              }`}
+              onClick={() => handleOpenAddModal()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1 shadow-sm transition"
             >
-              <CheckSquare className="w-4 h-4" />
-              {isBatchMode ? 'Exit Batch Mode' : 'Batch Select'}
+              <Plus size={15} />
+              <span className="hidden sm:inline">Add Activity</span>
             </button>
 
-            {/* Category Manager */}
             <button
-              onClick={() => setShowCategoryManager(true)}
-              className={`p-2 rounded-xl border transition-all ${
-                darkMode
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              onClick={handleGenerateShareLink}
+              className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
+                darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
-              title="Manage Categories & Tag Colors"
+              title="Share via URL Encoded Link (Method 2)"
             >
-              <Tag className="w-4 h-4" />
+              <Share2 size={16} className="text-amber-500" />
+              <span className="hidden lg:inline">Share Link</span>
             </button>
 
-            {/* Analytics Toggle */}
             <button
-              onClick={() => setShowAnalytics(true)}
-              className={`p-2 rounded-xl border transition-all ${
-                darkMode
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              onClick={() => setActiveModal('categories')}
+              className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
+                darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
+              }`}
+              title="Manage Categories & Striped Tag Colors"
+            >
+              <Tag size={16} className="text-emerald-500" />
+              <span className="hidden lg:inline">Tags</span>
+            </button>
+
+            <button
+              onClick={() => setActiveModal('analytics')}
+              className={`p-1.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
+                darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
               title="Time Analytics Dashboard"
             >
-              <BarChart3 className="w-4 h-4" />
+              <BarChart2 size={16} className="text-purple-500" />
+              <span className="hidden lg:inline">Stats</span>
             </button>
 
-            {/* Export & Import Utilities */}
-            <div className="flex items-center border rounded-xl overflow-hidden dark:border-slate-700 border-slate-200">
-              <button
-                onClick={exportJSON}
-                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                title="Export JSON Schedule"
-              >
-                <FileCode className="w-4 h-4" />
-              </button>
-              <button
-                onClick={exportCSV}
-                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200"
-                title="Export CSV Table"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-              </button>
-              <label
-                className="p-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l dark:border-slate-700 border-slate-200 cursor-pointer"
-                title="Import JSON Data"
-              >
-                <Upload className="w-4 h-4" />
-                <input type="file" accept=".json" onChange={importJSON} className="hidden" />
-              </label>
-            </div>
+            <button
+              onClick={() => setActiveModal('settings')}
+              className={`p-1.5 rounded-lg border text-xs font-medium transition ${
+                darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
+              }`}
+              title="Date Range & Time Grid Settings"
+            >
+              <Settings size={16} className="text-slate-500" />
+            </button>
 
-            {/* Dark / Light Toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className={`p-2 rounded-xl border transition-all ${
-                darkMode
-                  ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+              className={`p-1.5 rounded-lg border text-xs font-medium transition ${
+                darkMode ? 'border-slate-700 hover:bg-slate-800 text-amber-400' : 'border-slate-200 hover:bg-slate-100 text-slate-600'
               }`}
-              title="Toggle Dark Mode"
+              title="Toggle Light / Dark Mode"
             >
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-
-            {/* Add Activity Button */}
-            <button
-              onClick={() =>
-                setEditingActivity({
-                  id: 'act-' + Date.now(),
-                  title: '',
-                  date: scheduleDates[0] || '2026-01-20',
-                  startTime: '09:00',
-                  endTime: '10:00',
-                  categoryIds: [categories[0]?.id || 'cat-work'],
-                  notes: '',
-                  isNew: true,
-                })
-              }
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              New Activity
+              {darkMode ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
-        </div>
 
-        {/* Sub-bar Filter Options & Multi-Tag Context */}
-        <div
-          className={`px-4 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${
-            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100/70 border-slate-200'
-          }`}
-        >
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-              <Filter className="w-3.5 h-3.5" /> Filter Tags:
-            </span>
-            {categories.map((cat) => {
-              const isActive = activeCategoryFilters.includes(cat.id);
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() =>
-                    setActiveCategoryFilters((prev) =>
-                      isActive ? prev.filter((id) => id !== cat.id) : [...prev, cat.id]
-                    )
-                  }
-                  className={`px-2.5 py-1 rounded-full font-medium transition-all flex items-center gap-1.5 border ${
-                    isActive
-                      ? 'border-transparent text-white shadow-sm'
-                      : darkMode
-                      ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? cat.color : undefined,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: isActive ? '#fff' : cat.color }}
-                  />
-                  {cat.name}
-                </button>
-              );
-            })}
-            {activeCategoryFilters.length > 0 && (
-              <button
-                onClick={() => setActiveCategoryFilters([])}
-                className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-semibold ml-1"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-
-          {/* Batch Mode Top Notice */}
-          {isBatchMode && (
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                <CheckSquare className="w-3.5 h-3.5" /> Multi-Select Active
-              </span>
-              <button
-                onClick={handleSelectAll}
-                className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 font-medium text-xs"
-              >
-                Select All
-              </button>
-              <button
-                onClick={handleDeselectAll}
-                className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 font-medium text-xs"
-              >
-                Deselect All
-              </button>
-              <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold">
-                {selectedActivityIds.length} Selected
-              </span>
-            </div>
-          )}
         </div>
       </header>
 
-      <main className="flex-1 overflow-x-auto p-4 max-w-[1600px] w-full mx-auto">
-        <div
-          ref={mainGridRef}
-          className={`min-w-[1000px] rounded-2xl border shadow-sm overflow-hidden flex flex-col ${
-            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}
-        >
-          {/* Dynamic Columns Header */}
-          <div
-            className={`grid sticky top-[108px] z-20 border-b ${
-              darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-200' : 'bg-slate-100/90 border-slate-200 text-slate-700'
-            }`}
-            style={{
-              gridTemplateColumns: `80px repeat(${scheduleDates.length}, minmax(120px, 1fr))`,
-            }}
-          >
-            {/* Time Column Header */}
-            <div className="p-3 border-r dark:border-slate-800 border-slate-200 font-semibold text-xs text-center flex items-center justify-center gap-1 text-slate-400">
-              <Clock className="w-3.5 h-3.5" /> Time
-            </div>
-
-            {/* Date Column Headers */}
-            {scheduleDates.map((dateStr) => {
-              const { dayName, formattedDate } = formatDateLabel(dateStr);
-              const dayCount = filteredActivities.filter((a) => a.date === dateStr).length;
-
-              return (
-                <div
-                  key={dateStr}
-                  onClick={() => setSelectedDayView(dateStr)}
-                  className="p-3 border-r last:border-r-0 dark:border-slate-800 border-slate-200 text-center cursor-pointer group hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition-all relative"
-                  title="Click to expand full Single Day View"
-                >
-                  <div className="font-bold text-xs md:text-sm tracking-tight flex items-center justify-center gap-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                    {dayName}
-                    <Maximize2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-center gap-1 mt-0.5">
-                    <span>{formattedDate}</span>
-                    {dayCount > 0 && (
-                      <span className="w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center">
-                        {dayCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Timetable Body Grid */}
-          <div
-            className="grid relative"
-            style={{
-              gridTemplateColumns: `80px repeat(${scheduleDates.length}, minmax(120px, 1fr))`,
-              height: `${mainGridHeight}px`,
-            }}
-          >
-            {/* Time Axis Column */}
-            <div
-              className={`border-r dark:border-slate-800 border-slate-200 select-none ${
-                darkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'
-              }`}
+      {/* Sub-Header Bar: Selection Toggle & Category Legend */}
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+        
+        {/* Category Legend Pill Tags */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-400 mr-1 flex items-center">
+            <Layers size={13} className="mr-1" /> Categories:
+          </span>
+          {categories.map(cat => (
+            <span
+              key={cat.id}
+              className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium shadow-xs text-white"
+              style={{ backgroundColor: cat.color }}
             >
-              {Array.from({ length: totalHours }).map((_, idx) => {
-                const hourMins = gridStartMins + idx * 60;
+              <span>{cat.name}</span>
+            </span>
+          ))}
+        </div>
+
+        {/* Batch Selection Mode Toggle (Method 4) */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              if (selectionMode) setSelectedActivityIds([]);
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-medium border flex items-center space-x-1.5 transition ${
+              selectionMode 
+                ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
+                : darkMode 
+                ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' 
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {selectionMode ? <CheckSquare size={14} /> : <Square size={14} />}
+            <span>{selectionMode ? 'Selection Mode Active' : 'Batch Selection'}</span>
+          </button>
+        </div>
+
+      </div>
+
+      {/* Floating Action Bar for Batch Selection Mode (Method 4) */}
+      {selectionMode && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-4 text-xs font-medium animate-fade-in">
+          <span>
+            <strong className="text-blue-400">{selectedActivityIds.length}</strong> items selected
+          </span>
+          <div className="h-4 w-px bg-slate-700" />
+          <button
+            onClick={handleSelectAll}
+            className="text-slate-300 hover:text-white transition"
+          >
+            Select All ({filteredActivities.length})
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            className="text-slate-400 hover:text-white transition"
+          >
+            Clear
+          </button>
+          <div className="h-4 w-px bg-slate-700" />
+          <button
+            disabled={selectedActivityIds.length === 0}
+            onClick={() => setActiveModal('batchDelete')}
+            className={`px-3 py-1.5 rounded-lg flex items-center space-x-1 transition ${
+              selectedActivityIds.length > 0
+                ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Trash2 size={14} />
+            <span>Delete Selected</span>
+          </button>
+        </div>
+      )}
+
+      {}
+      <main className="max-w-7xl mx-auto px-4 lg:px-8 mt-2">
+        <div className={`rounded-2xl border shadow-sm overflow-x-auto ${darkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+          <div className="min-w-[800px]">
+            
+            {/* Grid Days Header Row (Method 5: Interactive Day Headers for Expanded Single Day Pop-up) */}
+            <div className={`grid grid-cols-8 border-b text-xs font-semibold ${darkMode ? 'border-slate-800 bg-slate-800/50 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+              
+              {/* Time axis header */}
+              <div className="p-3 border-r border-slate-200 dark:border-slate-800 flex items-center justify-center space-x-1 text-slate-400">
+                <Clock size={14} />
+                <span>GMT</span>
+              </div>
+
+              {/* Day Columns Headers */}
+              {dateColumns.map((dateStr) => {
+                const dateObj = new Date(dateStr + 'T00:00:00');
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                const dayNum = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const dayActivitiesCount = activities.filter(a => a.date === dateStr).length;
+
                 return (
                   <div
-                    key={idx}
-                    className="border-b dark:border-slate-800/60 border-slate-200/80 pr-2 text-right font-medium text-[11px] text-slate-400 flex items-start justify-end pt-1"
-                    style={{ height: `${MAIN_HOUR_HEIGHT}px` }}
+                    key={dateStr}
+                    onClick={() => {
+                      setSelectedDayForView(dateStr);
+                      setActiveModal('dayView');
+                    }}
+                    className={`p-2.5 border-r last:border-r-0 border-slate-200 dark:border-slate-800 text-center cursor-pointer transition hover:bg-blue-50 dark:hover:bg-blue-950/30 group`}
+                    title="Click for Expanded Single Day Detail View"
                   >
-                    {formatDisplayTime(minutesToTime(hourMins))}
+                    <div className="text-slate-400 text-[10px] uppercase tracking-wider">{dayName}</div>
+                    <div className="font-bold text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center space-x-1">
+                      <span>{dayNum}</span>
+                      <Maximize2 size={10} className="opacity-0 group-hover:opacity-100 transition text-blue-500" />
+                    </div>
+                    {dayActivitiesCount > 0 && (
+                      <span className="inline-block mt-1 text-[10px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full font-normal">
+                        {dayActivitiesCount} item{dayActivitiesCount > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Date Columns & Draggable Activity Blocks */}
-            {scheduleDates.map((dateStr) => {
-              const dayActivities = filteredActivities.filter((a) => a.date === dateStr);
-              const layoutItems = calculateOverlaps(dayActivities);
-
-              return (
-                <div
-                  key={dateStr}
-                  className="border-r last:border-r-0 dark:border-slate-800 border-slate-200 relative group transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const clickY = e.clientY - rect.top;
-                    const clickedMinute = gridStartMins + (clickY / mainGridHeight) * totalMinutes;
-                    handleGridCellClick(dateStr, clickedMinute);
-                  }}
-                >
-                  {/* Hourly Background Horizontal Lines */}
-                  {Array.from({ length: totalHours }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="border-b dark:border-slate-800/40 border-slate-100 pointer-events-none"
-                      style={{ height: `${MAIN_HOUR_HEIGHT}px` }}
-                    />
-                  ))}
-
-                  {/* Half-Hour Dashed Subdivision Lines */}
-                  {Array.from({ length: totalHours }).map((_, idx) => (
-                    <div
-                      key={`sub-${idx}`}
-                      className="border-b border-dashed dark:border-slate-800/20 border-slate-100 pointer-events-none absolute w-full"
-                      style={{ top: `${(idx + 0.5) * MAIN_HOUR_HEIGHT}px` }}
-                    />
-                  ))}
-
-                  {/* Activity Blocks */}
-                  {layoutItems.map((act) => {
-                    const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
-                    const bgStyle = getMultiTagBackground(actCatIds, categoryMap, darkMode);
-
-                    const startMins = timeToMinutes(act.startTime);
-                    const endMins = timeToMinutes(act.endTime);
-
-                    const topPx = ((startMins - gridStartMins) / totalMinutes) * mainGridHeight;
-                    const heightPx = ((endMins - startMins) / totalMinutes) * mainGridHeight;
-
-                    const widthPercent = 100 / (act.totalColumns || 1);
-                    const leftPercent = (act.columnIndex || 0) * widthPercent;
-
-                    const isSelected = selectedActivityIds.includes(act.id);
-
-                    return (
-                      <div
-                        key={act.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isBatchMode) {
-                            toggleSelectActivity(act.id);
-                          } else {
-                            setEditingActivity({ ...act });
-                          }
-                        }}
-                        style={{
-                          top: `${topPx}px`,
-                          height: `${Math.max(26, heightPx)}px`,
-                          left: `${leftPercent}%`,
-                          width: `${widthPercent}%`,
-                          ...bgStyle,
-                        }}
-                        className={`absolute rounded-xl border-l-4 border-y border-r p-1.5 text-xs shadow-sm cursor-pointer transition-all duration-75 overflow-hidden flex flex-col justify-between group/card ${
-                          isSelected
-                            ? 'ring-2 ring-rose-500 ring-offset-1 bg-rose-500/30'
-                            : 'hover:shadow-md hover:z-10'
-                        } ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}
-                      >
-                        {/* Top Resize Handle */}
-                        {!isBatchMode && (
-                          <div
-                            onMouseDown={(e) => handleMouseDown(e, act, 'resize-top', 'main')}
-                            className="absolute top-0 left-0 right-0 h-2 cursor-n-resize hover:bg-slate-400/40 opacity-0 group-hover/card:opacity-100 z-10 rounded-t"
-                          />
-                        )}
-
-                        {/* Title & Tag Pills Header */}
-                        <div className="flex items-start justify-between gap-1 pointer-events-none">
-                          <div className="flex items-center gap-1 min-w-0">
-                            {isBatchMode && (
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSelectActivity(act.id);
-                                }}
-                                className="pointer-events-auto mr-1"
-                              >
-                                {isSelected ? (
-                                  <CheckSquare className="w-4 h-4 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
-                                ) : (
-                                  <Square className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                                )}
-                              </div>
-                            )}
-
-                            {/* Tag Color Indicators */}
-                            <div className="flex items-center -space-x-1 shrink-0">
-                              {actCatIds.map((id) => (
-                                <span
-                                  key={id}
-                                  className="w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 shadow-sm"
-                                  style={{ backgroundColor: categoryMap[id]?.color || '#94a3b8' }}
-                                  title={categoryMap[id]?.name}
-                                />
-                              ))}
-                            </div>
-
-                            <p className="font-bold truncate leading-tight text-[11px] ml-0.5">
-                              {act.title || 'Untitled'}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Time & Notes */}
-                        <div className="my-0.5 pointer-events-none">
-                          <p className="text-[10px] font-semibold opacity-85">
-                            {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
-                          </p>
-                          {heightPx > 50 && act.notes && (
-                            <p className="text-[10px] opacity-75 truncate italic mt-0.5">{act.notes}</p>
-                          )}
-                        </div>
-
-                        {/* Center Drag Handle Overlay */}
-                        {!isBatchMode && (
-                          <div
-                            onMouseDown={(e) => handleMouseDown(e, act, 'move', 'main')}
-                            className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px] transition-opacity"
-                          >
-                            <span className="text-[9px] font-bold bg-slate-900 text-white px-2 py-0.5 rounded shadow pointer-events-none flex items-center gap-1">
-                              <Move className="w-2.5 h-2.5" /> Drag
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Bottom Resize Handle */}
-                        {!isBatchMode && (
-                          <div
-                            onMouseDown={(e) => handleMouseDown(e, act, 'resize-bottom', 'main')}
-                            className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize hover:bg-slate-400/40 opacity-0 group-hover/card:opacity-100 z-10 rounded-b"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </main>
-
-      {selectedDayView && (
-        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-hidden">
-          <div
-            className={`w-full max-w-4xl h-[92vh] rounded-2xl shadow-2xl border flex flex-col overflow-hidden animate-fadeIn ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            {/* Modal Header */}
-            <div
-              className={`px-6 py-4 border-b flex items-center justify-between gap-4 ${
-                darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {/* Day Navigation */}
-                <button
-                  onClick={() => {
-                    const idx = scheduleDates.indexOf(selectedDayView);
-                    if (idx > 0) setSelectedDayView(scheduleDates[idx - 1]);
-                  }}
-                  disabled={scheduleDates.indexOf(selectedDayView) === 0}
-                  className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
-                  title="Previous Day"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-5 h-5 text-indigo-500" />
-                    <h2 className="font-bold text-lg md:text-xl tracking-tight">
-                      {formatDateLabel(selectedDayView).fullDayName}, {formatDateLabel(selectedDayView).fullFormattedDate}
-                    </h2>
+            {/* Time Grid Matrix Body */}
+            <div className="relative grid grid-cols-8 divide-x divide-slate-200 dark:divide-slate-800 min-h-[500px]">
+              
+              {/* Left Column: Hourly Time Slot Markers */}
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-400 text-[11px] text-right pr-2">
+                {timeSlots.map((timeStr) => (
+                  <div key={timeStr} className="h-16 pt-1 font-mono">
+                    {formatDisplayTime(timeStr)}
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    High Resolution Day View • 5-minute precision grid snapping
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    const idx = scheduleDates.indexOf(selectedDayView);
-                    if (idx < scheduleDates.length - 1) setSelectedDayView(scheduleDates[idx + 1]);
-                  }}
-                  disabled={scheduleDates.indexOf(selectedDayView) === scheduleDates.length - 1}
-                  className="p-1.5 rounded-xl border hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 dark:border-slate-700"
-                  title="Next Day"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+                ))}
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() =>
-                    setEditingActivity({
-                      id: 'act-' + Date.now(),
-                      title: '',
-                      date: selectedDayView,
-                      startTime: '09:00',
-                      endTime: '10:00',
-                      categoryIds: [categories[0]?.id || 'cat-work'],
-                      notes: '',
-                      isNew: true,
-                    })
-                  }
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" /> Add Activity
-                </button>
+              {/* Day Activity Columns */}
+              {dateColumns.map((dateStr) => {
+                const dayActs = filteredActivities.filter(a => a.date === dateStr);
 
-                <button
-                  onClick={() => setSelectedDayView(null)}
-                  className="px-3.5 py-1.5 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs rounded-xl hover:opacity-90 transition-all flex items-center gap-1.5 shadow"
-                >
-                  <Minimize2 className="w-4 h-4" /> Close Day View
-                </button>
-              </div>
-            </div>
-
-            {/* Single Day High-Res Interactive Grid */}
-            <div className="flex-1 overflow-y-auto relative p-4">
-              <div
-                className="max-w-3xl mx-auto rounded-xl border dark:border-slate-800 border-slate-200 overflow-hidden relative"
-                style={{ height: `${dayViewGridHeight}px` }}
-              >
-                <div className="grid grid-cols-[90px_1fr] h-full relative">
-                  {/* Left Time Axis */}
-                  <div
-                    className={`border-r dark:border-slate-800 border-slate-200 select-none ${
-                      darkMode ? 'bg-slate-900/60' : 'bg-slate-50'
-                    }`}
-                  >
-                    {Array.from({ length: totalHours }).map((_, idx) => {
-                      const hourMins = gridStartMins + idx * 60;
-                      return (
-                        <div
-                          key={idx}
-                          className="border-b dark:border-slate-800/80 border-slate-200 pr-3 text-right font-semibold text-xs text-slate-500 dark:text-slate-400 flex items-start justify-end pt-2"
-                          style={{ height: `${DAY_VIEW_HOUR_HEIGHT}px` }}
-                        >
-                          {formatDisplayTime(minutesToTime(hourMins))}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Day Column Area */}
-                  <div
-                    className="relative transition-colors hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 cursor-pointer"
-                    onClick={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const clickY = e.clientY - rect.top;
-                      const clickedMinute = gridStartMins + (clickY / dayViewGridHeight) * totalMinutes;
-                      handleGridCellClick(selectedDayView, clickedMinute);
-                    }}
-                  >
-                    {/* Hour Lines */}
-                    {Array.from({ length: totalHours }).map((_, idx) => (
+                return (
+                  <div key={dateStr} className="relative divide-y divide-slate-100 dark:divide-slate-800/40">
+                    
+                    {/* Background Hour Lines for Grid Alignment */}
+                    {timeSlots.map((timeStr) => (
                       <div
-                        key={idx}
-                        className="border-b dark:border-slate-800/60 border-slate-200 pointer-events-none"
-                        style={{ height: `${DAY_VIEW_HOUR_HEIGHT}px` }}
+                        key={timeStr}
+                        onClick={() => {
+                          setActivityForm({
+                            title: '',
+                            date: dateStr,
+                            startTime: timeStr,
+                            endTime: minutesToTime(timeToMinutes(timeStr) + 60),
+                            categoryIds: [categories[0]?.id || 'cat-work'],
+                            notes: ''
+                          });
+                          setActiveModal('activity');
+                        }}
+                        className="h-16 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition cursor-pointer"
+                        title={`Click to schedule activity at ${formatDisplayTime(timeStr)}`}
                       />
                     ))}
 
-                    {/* 15-Min Sub-guidelines */}
-                    {Array.from({ length: totalHours * 4 }).map((_, idx) => (
-                      <div
-                        key={`sub15-${idx}`}
-                        className="border-b border-dashed dark:border-slate-800/30 border-slate-100 pointer-events-none absolute w-full"
-                        style={{ top: `${(idx * DAY_VIEW_HOUR_HEIGHT) / 4}px` }}
-                      />
-                    ))}
+                    {/* Positioned Activity Cards */}
+                    {dayActs.map((act) => {
+                      const actStartMins = timeToMinutes(act.startTime);
+                      const actEndMins = timeToMinutes(act.endTime);
 
-                    {/* Single Day Activity Cards */}
-                    {calculateOverlaps(filteredActivities.filter((a) => a.date === selectedDayView)).map((act) => {
-                      const actCatIds = act.categoryIds || (act.categoryId ? [act.categoryId] : []);
-                      const bgStyle = getMultiTagBackground(actCatIds, categoryMap, darkMode);
-
-                      const startMins = timeToMinutes(act.startTime);
-                      const endMins = timeToMinutes(act.endTime);
-
-                      const topPx = ((startMins - gridStartMins) / totalMinutes) * dayViewGridHeight;
-                      const heightPx = ((endMins - startMins) / totalMinutes) * dayViewGridHeight;
-
-                      const widthPercent = 100 / (act.totalColumns || 1);
-                      const leftPercent = (act.columnIndex || 0) * widthPercent;
+                      // Calculate Top % and Height % within the timeline range
+                      const topPercent = Math.max(0, ((actStartMins - gridStartMins) / totalGridMins) * 100);
+                      const durationMins = Math.max(15, actEndMins - actStartMins);
+                      const heightPercent = (durationMins / totalGridMins) * 100;
 
                       const isSelected = selectedActivityIds.includes(act.id);
+                      const categoryStyle = getCategoryStyle(act.categoryIds, categories);
 
                       return (
                         <div
                           key={act.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isBatchMode) {
-                              toggleSelectActivity(act.id);
-                            } else {
-                              setEditingActivity({ ...act });
-                            }
-                          }}
                           style={{
-                            top: `${topPx}px`,
-                            height: `${Math.max(40, heightPx)}px`,
-                            left: `${leftPercent}%`,
-                            width: `${widthPercent}%`,
-                            ...bgStyle,
+                            top: `${topPercent}%`,
+                            height: `${heightPercent}%`,
+                            position: 'absolute',
+                            left: '4px',
+                            right: '4px',
+                            ...categoryStyle
                           }}
-                          className={`absolute rounded-xl border-l-8 border-y border-r p-3 text-xs shadow-md cursor-pointer transition-all overflow-hidden flex flex-col justify-between group/daycard ${
-                            isSelected
-                              ? 'ring-4 ring-rose-500 bg-rose-500/30'
-                              : 'hover:shadow-lg hover:z-10'
-                          } ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}
+                          className={`rounded-xl p-2 text-xs shadow-md border border-white/20 overflow-hidden transition-all duration-150 flex flex-col justify-between group hover:z-20 hover:scale-[1.02] ${
+                            isSelected ? 'ring-2 ring-amber-400 ring-offset-1' : ''
+                          }`}
                         >
-                          {/* Top Resize Handle */}
-                          {!isBatchMode && (
-                            <div
-                              onMouseDown={(e) => handleMouseDown(e, act, 'resize-top', 'dayView')}
-                              className="absolute top-0 left-0 right-0 h-3 cursor-n-resize hover:bg-slate-400/40 opacity-0 group-hover/daycard:opacity-100 z-10 rounded-t"
-                            />
-                          )}
-
-                          {/* Top Tag Pills & Title */}
-                          <div className="flex items-start justify-between gap-2 pointer-events-none">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {isBatchMode && (
-                                <div
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-1">
+                            
+                            {/* Selection Checkbox OR Title */}
+                            <div className="flex items-center space-x-1 overflow-hidden">
+                              {selectionMode && (
+                                <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     toggleSelectActivity(act.id);
                                   }}
-                                  className="pointer-events-auto"
+                                  className="text-white hover:text-amber-200"
                                 >
-                                  {isSelected ? (
-                                    <CheckSquare className="w-5 h-5 text-rose-600 dark:text-rose-400 fill-rose-100 dark:fill-rose-950" />
-                                  ) : (
-                                    <Square className="w-5 h-5 text-slate-400 dark:text-slate-500" />
-                                  )}
-                                </div>
+                                  {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                                </button>
                               )}
-
-                              {actCatIds.map((id) => (
-                                <span
-                                  key={id}
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1"
-                                  style={{ backgroundColor: categoryMap[id]?.color || '#64748B' }}
-                                >
-                                  {categoryMap[id]?.name}
-                                </span>
-                              ))}
-
-                              <h4 className="font-bold text-sm tracking-tight">{act.title || 'Untitled'}</h4>
+                              <span className="font-bold truncate drop-shadow-sm text-white">
+                                {act.title}
+                              </span>
                             </div>
 
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300">
+                            {/* Quick Action Icons */}
+                            {!selectionMode && (
+                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center space-x-1 bg-black/40 backdrop-blur-xs p-0.5 rounded-md">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditModal(act);
+                                  }}
+                                  className="p-0.5 text-white hover:text-blue-200"
+                                  title="Edit Activity"
+                                >
+                                  <Edit3 size={11} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteSingleActivity(act.id);
+                                  }}
+                                  className="p-0.5 text-white hover:text-red-200"
+                                  title="Delete Activity"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Time Details & Tags */}
+                          <div className="mt-1 text-[10px] opacity-90 flex items-center justify-between drop-shadow-sm">
+                            <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-[9px]">
                               {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
                             </span>
                           </div>
-
-                          {act.notes && heightPx > 50 && (
-                            <p className="text-xs opacity-90 my-1 pointer-events-none line-clamp-2">
-                              {act.notes}
-                            </p>
-                          )}
-
-                          {/* Center Drag Overlay */}
-                          {!isBatchMode && (
-                            <div
-                              onMouseDown={(e) => handleMouseDown(e, act, 'move', 'dayView')}
-                              className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/daycard:opacity-100 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px] transition-opacity"
-                            >
-                              <span className="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full shadow pointer-events-none flex items-center gap-1">
-                                <Move className="w-3.5 h-3.5" /> Drag to reposition (5m snap)
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Bottom Resize Handle */}
-                          {!isBatchMode && (
-                            <div
-                              onMouseDown={(e) => handleMouseDown(e, act, 'resize-bottom', 'dayView')}
-                              className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-slate-400/40 opacity-0 group-hover/daycard:opacity-100 z-10 rounded-b"
-                            />
-                          )}
                         </div>
                       );
                     })}
+
                   </div>
-                </div>
-              </div>
+                );
+              })}
+
             </div>
+
           </div>
         </div>
-      )}
+      </main>
 
-      {isBatchMode && selectedActivityIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 flex items-center gap-4 animate-bounce">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-            <span className="font-bold text-sm">
-              {selectedActivityIds.length} {selectedActivityIds.length === 1 ? 'activity' : 'activities'} selected
-            </span>
-          </div>
-          <div className="h-4 w-px bg-slate-700 dark:bg-slate-300" />
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
-          >
-            <Trash2 className="w-4 h-4" /> Delete Selected
-          </button>
-        </div>
-      )}
-
-      {/* Batch Delete Confirm Dialog */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center gap-3 text-rose-500 mb-4">
-              <div className="p-3 rounded-full bg-rose-100 dark:bg-rose-950/80">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg">Confirm Batch Deletion</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
-              Are you sure you want to permanently delete{' '}
-              <span className="font-bold text-rose-600 dark:text-rose-400">{selectedActivityIds.length}</span> selected activity items?
-            </p>
-
-            <div
-              className={`p-3 rounded-xl max-h-36 overflow-y-auto mb-6 text-xs border ${
-                darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <p className="font-bold mb-2 text-slate-400 uppercase text-[10px] tracking-wider">Items to remove:</p>
-              <ul className="space-y-1">
-                {activities
-                  .filter((a) => selectedActivityIds.includes(a.id))
-                  .map((a) => (
-                    <li key={a.id} className="truncate flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                      <span className="font-medium">{a.title}</span>
-                      <span className="opacity-60 text-[10px]">({a.date})</span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className={`px-4 py-2 text-xs font-semibold rounded-xl border transition-all ${
-                  darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBatchDeleteConfirm}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-rose-500/20 transition-all flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" /> Confirm Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingActivity && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-indigo-500" />
-                {editingActivity.isNew ? 'Create Activity' : 'Edit Activity'}
+      {}
+      {activeModal === 'activity' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <Calendar size={18} className="text-blue-500" />
+                <span>{editingActivity ? 'Edit Activity' : 'Add New Activity'}</span>
               </h3>
-              <button
-                onClick={() => setEditingActivity(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
               </button>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setActivities((prev) => {
-                  const exists = prev.some((a) => a.id === editingActivity.id);
-                  if (exists) {
-                    return prev.map((a) => (a.id === editingActivity.id ? editingActivity : a));
-                  }
-                  return [...prev, { ...editingActivity, isNew: undefined }];
-                });
-                setEditingActivity(null);
-              }}
-              className="space-y-4 text-xs"
-            >
+            <form onSubmit={handleSaveActivity} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Activity Title</label>
+                <label className="block font-semibold mb-1 text-slate-500">Activity Title</label>
                 <input
                   type="text"
                   required
-                  value={editingActivity.title}
-                  onChange={(e) => setEditingActivity({ ...editingActivity, title: e.target.value })}
-                  placeholder="e.g. Deep Work & Architecture"
-                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                    darkMode
-                      ? 'bg-slate-800 border-slate-700 text-slate-100 focus:border-indigo-500'
-                      : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                  placeholder="e.g. Morning Workout / Client Call"
+                  value={activityForm.title}
+                  onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
                 />
               </div>
 
-              {/* Multi-Tag Selection Checkboxes / Pills */}
               <div>
-                <label className="block font-semibold mb-1.5 text-slate-600 dark:text-slate-400 flex items-center justify-between">
-                  <span>Categories / Tags (Select multiple for striped gradient)</span>
-                  <span className="text-[10px] text-indigo-500 font-medium">Multi-tag supported</span>
-                </label>
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 rounded-xl border dark:border-slate-800 border-slate-200">
-                  {categories.map((cat) => {
-                    const currentTags = editingActivity.categoryIds || [];
-                    const isChecked = currentTags.includes(cat.id);
+                <label className="block font-semibold mb-1 text-slate-500">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={activityForm.date}
+                  onChange={(e) => setActivityForm({ ...activityForm, date: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                />
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">Start Time</label>
+                  <input
+                    type="time"
+                    step="300" // 5 min precision
+                    required
+                    value={activityForm.startTime}
+                    onChange={(e) => setActivityForm({ ...activityForm, startTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">End Time</label>
+                  <input
+                    type="time"
+                    step="300"
+                    required
+                    value={activityForm.endTime}
+                    onChange={(e) => setActivityForm({ ...activityForm, endTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Multi-Tag Category Selection (Method 3 Striped Gradient support) */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-500">
+                  Category Tags (Select multiple for Striped Gradient pattern)
+                </label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {categories.map(cat => {
+                    const isSelected = activityForm.categoryIds.includes(cat.id);
                     return (
                       <button
                         key={cat.id}
                         type="button"
                         onClick={() => {
-                          const updated = isChecked
-                            ? currentTags.filter((id) => id !== cat.id)
-                            : [...currentTags, cat.id];
-                          setEditingActivity({ ...editingActivity, categoryIds: updated });
+                          setActivityForm(prev => {
+                            const exists = prev.categoryIds.includes(cat.id);
+                            return {
+                              ...prev,
+                              categoryIds: exists
+                                ? prev.categoryIds.filter(id => id !== cat.id)
+                                : [...prev.categoryIds, cat.id]
+                            };
+                          });
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-                          isChecked
-                            ? 'text-white border-transparent shadow-sm'
-                            : darkMode
-                            ? 'bg-slate-800 border-slate-700 text-slate-300'
-                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                        className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center space-x-1.5 transition ${
+                          isSelected
+                            ? 'ring-2 ring-blue-500 text-white font-bold'
+                            : 'opacity-60 text-slate-700 dark:text-slate-300'
                         }`}
-                        style={{
-                          backgroundColor: isChecked ? cat.color : undefined,
-                        }}
+                        style={{ backgroundColor: cat.color }}
                       >
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: isChecked ? '#fff' : cat.color }}
-                        />
-                        {cat.name}
-                        {isChecked && <Check className="w-3 h-3 ml-0.5" />}
+                        {isSelected && <Check size={12} />}
+                        <span>{cat.name}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Date</label>
-                  <select
-                    value={editingActivity.date}
-                    onChange={(e) => setEditingActivity({ ...editingActivity, date: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    {scheduleDates.map((d) => {
-                      const { dayName, formattedDate } = formatDateLabel(d);
-                      return (
-                        <option key={d} value={d}>
-                          {dayName}, {formattedDate}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Time</label>
-                  <input
-                    type="time"
-                    min="00:00"
-                    max="23:59"
-                    step="300"
-                    required
-                    value={editingActivity.startTime}
-                    onChange={(e) => setEditingActivity({ ...editingActivity, startTime: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Time</label>
-                  <input
-                    type="time"
-                    min="00:00"
-                    max="23:59"
-                    step="300"
-                    required
-                    value={editingActivity.endTime}
-                    onChange={(e) => setEditingActivity({ ...editingActivity, endTime: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  />
-                </div>
-
-                {/* Preview strip */}
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Visual Gradient</label>
-                  <div
-                    className="h-9 rounded-xl border flex items-center justify-center font-bold text-[10px] text-slate-700 dark:text-slate-200 shadow-inner"
-                    style={getMultiTagBackground(editingActivity.categoryIds, categoryMap, darkMode)}
-                  >
-                    {editingActivity.categoryIds?.length > 1
-                      ? `${editingActivity.categoryIds.length} Tags Mixture`
-                      : categoryMap[editingActivity.categoryIds?.[0]]?.name || 'Single Tag'}
-                  </div>
-                </div>
-              </div>
-
               <div>
-                <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Notes / Details</label>
+                <label className="block font-semibold mb-1 text-slate-500">Notes / Details</label>
                 <textarea
                   rows={3}
-                  value={editingActivity.notes || ''}
-                  onChange={(e) => setEditingActivity({ ...editingActivity, notes: e.target.value })}
-                  placeholder="Add details, links or agenda notes..."
-                  className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                  placeholder="Additional context or checklist items..."
+                  value={activityForm.notes}
+                  onChange={(e) => setActivityForm({ ...activityForm, notes: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t dark:border-slate-800 border-slate-200">
-                {!editingActivity.isNew ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivities((prev) => prev.filter((a) => a.id !== editingActivity.id));
-                      setEditingActivity(null);
-                    }}
-                    className="text-rose-500 hover:text-rose-700 font-semibold flex items-center gap-1"
-                  >
-                    <Trash2 className="w-4 h-4" /> Delete
-                  </button>
-                ) : (
-                  <span />
-                )}
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingActivity(null)}
-                    className={`px-4 py-2 font-semibold rounded-xl border ${
-                      darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md shadow-indigo-500/20"
-                  >
-                    Save Activity
-                  </button>
-                </div>
+              <div className="pt-2 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md transition"
+                >
+                  {editingActivity ? 'Save Changes' : 'Create Activity'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {showDateSettings && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            className={`max-w-md w-full rounded-2xl p-6 shadow-2xl border ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-indigo-500" />
-                Schedule Range & Time Window
+      {}
+      {activeModal === 'share' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <Share2 size={18} className="text-amber-500" />
+                <span>Shareable View Link (Method 2)</span>
               </h3>
-              <button
-                onClick={() => setShowDateSettings(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
-              {/* Presets */}
-              <div>
-                <label className="block font-semibold mb-1.5 text-slate-600 dark:text-slate-400">Quick Presets</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => {
-                      setStartDate('2026-01-20');
-                      setEndDate('2026-01-27');
-                    }}
-                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
-                  >
-                    Jan 20 – Jan 27
-                  </button>
-                  <button
-                    onClick={() => {
-                      const today = new Date();
-                      const yyyy = today.getFullYear();
-                      const mm = String(today.getMonth() + 1).padStart(2, '0');
-                      const dd = String(today.getDate()).padStart(2, '0');
-                      const end = new Date();
-                      end.setDate(end.getDate() + 6);
-                      const ey = end.getFullYear();
-                      const em = String(end.getMonth() + 1).padStart(2, '0');
-                      const ed = String(end.getDate()).padStart(2, '0');
-                      setStartDate(`${yyyy}-${mm}-${dd}`);
-                      setEndDate(`${ey}-${em}-${ed}`);
-                    }}
-                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
-                  >
-                    7 Days From Today
-                  </button>
-                  <button
-                    onClick={() => {
-                      const today = new Date();
-                      const yyyy = today.getFullYear();
-                      const mm = String(today.getMonth() + 1).padStart(2, '0');
-                      const dd = String(today.getDate()).padStart(2, '0');
-                      const end = new Date();
-                      end.setDate(end.getDate() + 13);
-                      const ey = end.getFullYear();
-                      const em = String(end.getMonth() + 1).padStart(2, '0');
-                      const ed = String(end.getDate()).padStart(2, '0');
-                      setStartDate(`${yyyy}-${mm}-${dd}`);
-                      setEndDate(`${ey}-${em}-${ed}`);
-                    }}
-                    className="p-2 rounded-xl border text-center font-semibold hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-800"
-                  >
-                    14 Days Range
-                  </button>
-                </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+              This link encodes your entire schedule data directly into the URL string. Computer 2 can open this link to view your schedule <strong>without needing any database setup</strong>!
+            </p>
+
+            <div className="space-y-3 text-xs">
+              <div className="relative">
+                <textarea
+                  readOnly
+                  rows={4}
+                  value={generatedShareUrl}
+                  className={`w-full p-3 rounded-lg border font-mono text-[11px] select-all break-all ${
+                    darkMode ? 'bg-slate-800 border-slate-700 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                />
               </div>
 
-              {/* Custom Date Inputs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Start Date</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">End Date</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Grid Time Window Hours */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t dark:border-slate-800 border-slate-200">
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Daily Start Hour</label>
-                  <select
-                    value={startHour}
-                    onChange={(e) => setStartHour(Number(e.target.value))}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    {Array.from({ length: 12 }).map((_, i) => (
-                      <option key={i} value={i}>
-                        {i === 0 ? '12:00 AM' : `${i}:00 AM`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-600 dark:text-slate-400">Daily End Hour</label>
-                  <select
-                    value={endHour}
-                    onChange={(e) => setEndHour(Number(e.target.value))}
-                    className={`w-full px-3 py-2 rounded-xl border outline-none font-medium ${
-                      darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    {Array.from({ length: 13 }).map((_, i) => {
-                      const h = i + 12;
-                      return (
-                        <option key={h} value={h}>
-                          {h === 12 ? '12:00 PM' : h === 24 ? '12:00 AM Next Day' : `${h - 12}:00 PM`}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t dark:border-slate-800 border-slate-200 flex justify-end">
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-slate-400">
+                  Tip: Send this link via Email, Messaging apps, or Slack!
+                </span>
                 <button
-                  onClick={() => setShowDateSettings(false)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
+                  onClick={handleCopyShareLink}
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold flex items-center space-x-1.5 shadow-md transition"
                 >
-                  Apply Settings
+                  <Copy size={14} />
+                  <span>Copy Share Link</span>
                 </button>
               </div>
             </div>
@@ -1902,166 +1236,433 @@ export default function App() {
         </div>
       )}
 
-      {showCategoryManager && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            className={`max-w-lg w-full rounded-2xl p-6 shadow-2xl border ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <Tag className="w-4 h-4 text-indigo-500" />
-                Category & Tag Color Manager
+      {}
+      {activeModal === 'cloud' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <Cloud size={18} className="text-blue-500" />
+                <span>Cloud Database Synchronization (Method 3)</span>
               </h3>
-              <button
-                onClick={() => setShowCategoryManager(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-              {categories.map((cat) => (
+            <div className="space-y-4 text-xs">
+              
+              {/* Current Status Badge */}
+              <div className={`p-3 rounded-xl border flex items-center justify-between ${
+                cloudSyncStatus === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200' : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  <Cloud size={18} className={cloudSyncStatus === 'connected' ? 'text-emerald-500' : 'text-slate-400'} />
+                  <div>
+                    <div className="font-bold">
+                      Status: {cloudSyncStatus === 'connected' ? 'Active Real-Time Cloud Sync' : 'Local Browser Mode'}
+                    </div>
+                    {cloudUserId && <div className="text-[10px] opacity-75 font-mono">User ID: {cloudUserId}</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Firebase Setup Form */}
+              <form onSubmit={handleSaveFirebaseConfig} className="space-y-3">
+                <label className="block font-semibold text-slate-500">
+                  Firebase JSON Configuration Object
+                </label>
+                <textarea
+                  rows={6}
+                  placeholder={`{\n  "apiKey": "AIzaSy...",\n  "authDomain": "my-app.firebaseapp.com",\n  "projectId": "my-app-123"\n}`}
+                  value={firebaseConfigText}
+                  onChange={(e) => setFirebaseConfigText(e.target.value)}
+                  className={`w-full p-3 rounded-lg border font-mono text-[11px] focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">
+                    Paste your Firebase web config JSON above to enable multi-computer instant sync.
+                  </span>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-sm"
+                  >
+                    Save & Connect
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {}
+      {activeModal === 'dayView' && selectedDayForView && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-xl rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-4 border-b pb-3 border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 flex items-center space-x-2">
+                  <Calendar size={20} />
+                  <span>
+                    {new Date(selectedDayForView + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">Detailed Chronological Timeline View</p>
+              </div>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* List of Day Activities in Order */}
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {activities.filter(a => a.date === selectedDayForView).length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-xs">
+                  <Clock size={32} className="mx-auto mb-2 opacity-50" />
+                  <p>No activities scheduled for this day yet.</p>
+                </div>
+              ) : (
+                activities
+                  .filter(a => a.date === selectedDayForView)
+                  .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+                  .map((act) => {
+                    const categoryStyle = getCategoryStyle(act.categoryIds, categories);
+                    return (
+                      <div
+                        key={act.id}
+                        style={{ ...categoryStyle }}
+                        className="rounded-xl p-3 shadow-md border border-white/20 text-white transition hover:scale-[1.01]"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-bold text-sm drop-shadow-sm">{act.title}</h4>
+                            <div className="text-xs font-mono opacity-90 mt-0.5">
+                              {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => {
+                                handleOpenEditModal(act);
+                              }}
+                              className="p-1 text-white/80 hover:text-white"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSingleActivity(act.id)}
+                              className="p-1 text-white/80 hover:text-white"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {act.notes && (
+                          <div className="mt-2 text-xs opacity-90 bg-black/20 p-2 rounded-lg border border-white/10">
+                            {act.notes}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <button
+                onClick={() => handleOpenAddModal(selectedDayForView)}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center space-x-1 shadow-sm"
+              >
+                <Plus size={14} />
+                <span>Add Activity to this Day</span>
+              </button>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="px-4 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-medium"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {}
+      {activeModal === 'categories' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <Tag size={18} className="text-emerald-500" />
+                <span>Category Tag & Striped Pattern Manager</span>
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Category List */}
+            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+              {categories.map(cat => (
                 <div
                   key={cat.id}
-                  className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
-                    darkMode ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  className={`p-2 rounded-xl border flex items-center justify-between text-xs ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div className="flex items-center gap-3 flex-1">
-                    <input
-                      type="color"
-                      value={cat.color}
-                      onChange={(e) => {
-                        const newColor = e.target.value;
-                        setCategories((prev) =>
-                          prev.map((c) => (c.id === cat.id ? { ...c, color: newColor } : c))
-                        );
-                      }}
-                      className="w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent"
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className="w-4 h-4 rounded-full border border-white/20 shadow-xs"
+                      style={{ backgroundColor: cat.color }}
                     />
-                    <input
-                      type="text"
-                      value={cat.name}
-                      onChange={(e) => {
-                        const newName = e.target.value;
-                        setCategories((prev) =>
-                          prev.map((c) => (c.id === cat.id ? { ...c, name: newName } : c))
-                        );
-                      }}
-                      className={`font-semibold text-xs px-2.5 py-1.5 rounded-lg border outline-none w-full ${
-                        darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
-                      }`}
-                    />
+                    <span className="font-medium">{cat.name}</span>
                   </div>
-
                   <button
-                    onClick={() => {
-                      if (categories.length <= 1) return;
-                      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
-                    }}
-                    disabled={categories.length <= 1}
-                    className="text-slate-400 hover:text-rose-500 disabled:opacity-30 p-1.5"
+                    onClick={() => handleDeleteCategory(cat.id)}
+                    className="text-slate-400 hover:text-red-500 transition"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex items-center justify-between mt-4">
-              <button
-                onClick={() => {
-                  const newCat = {
-                    id: 'cat-' + Date.now(),
-                    name: 'New Tag',
-                    color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
-                  };
-                  setCategories((prev) => [...prev, newCat]);
-                }}
-                className="px-3.5 py-1.5 bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold rounded-xl hover:bg-indigo-100 flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" /> Add Tag / Category
-              </button>
-
-              <button
-                onClick={() => setShowCategoryManager(false)}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
-              >
-                Done
-              </button>
-            </div>
+            {/* Add New Category Form */}
+            <form onSubmit={handleAddCategory} className="space-y-3 border-t pt-3 border-slate-200 dark:border-slate-800">
+              <label className="block text-xs font-semibold text-slate-500">Create New Tag</label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="Category Name"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg border text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                />
+                <input
+                  type="color"
+                  value={newCatColor}
+                  onChange={(e) => setNewCatColor(e.target.value)}
+                  className="w-9 h-8 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700 cursor-pointer"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition"
+                >
+                  Add Tag
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {showAnalytics && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            className={`max-w-xl w-full rounded-2xl p-6 shadow-2xl border ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center justify-between border-b pb-3 mb-4 dark:border-slate-800 border-slate-200">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-indigo-500" />
-                Time Breakdown & Tag Utilization
+      {}
+      {activeModal === 'analytics' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <BarChart2 size={18} className="text-purple-500" />
+                <span>Time Allocation Analytics</span>
               </h3>
-              <button
-                onClick={() => setShowAnalytics(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-              Hours allocated across tags (multi-tagged activities are split proportionally among tags).
-            </p>
+            <div className="grid grid-cols-2 gap-3 mb-4 text-center">
+              <div className={`p-3 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-purple-50 border-purple-100'}`}>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{analyticsData.totalHours} hrs</div>
+                <div className="text-[11px] text-slate-500">Total Scheduled Time</div>
+              </div>
+              <div className={`p-3 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-blue-50 border-blue-100'}`}>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{analyticsData.totalActivities}</div>
+                <div className="text-[11px] text-slate-500">Activities Scheduled</div>
+              </div>
+            </div>
 
-            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-              {categoryAnalytics.map((cat) => (
-                <div key={cat.id} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-medium">
-                    <span className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                      <span className="font-bold">{cat.name}</span>
+            {/* Progress Breakdown Bars */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold text-slate-500">Breakdown by Category</h4>
+              {analyticsData.categoryBreakdown.map(cat => (
+                <div key={cat.id} className="space-y-1 text-xs">
+                  <div className="flex justify-between font-medium">
+                    <span className="flex items-center space-x-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                      <span>{cat.name}</span>
                     </span>
-                    <span className="text-slate-500 dark:text-slate-400">
-                      {cat.hours} hrs ({cat.percentage}%) • {cat.count} tagged
-                    </span>
+                    <span>{cat.hours} hrs ({cat.percentage}%)</span>
                   </div>
-
-                  <div
-                    className={`h-3 rounded-full overflow-hidden w-full ${
-                      darkMode ? 'bg-slate-800' : 'bg-slate-100'
-                    }`}
-                  >
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all duration-500"
+                      className="h-full transition-all duration-300"
                       style={{
                         width: `${cat.percentage}%`,
-                        backgroundColor: cat.color,
+                        backgroundColor: cat.color
                       }}
                     />
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex justify-end mt-6">
+      {}
+      {activeModal === 'settings' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base flex items-center space-x-2">
+                <Settings size={18} className="text-slate-500" />
+                <span>Grid & Date Range Settings</span>
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setActiveModal(null);
+                showToast('Schedule settings updated!', 'success');
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block font-semibold mb-1 text-slate-500">Schedule Title</label>
+                <input
+                  type="text"
+                  value={scheduleMeta.title}
+                  onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, title: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">Start Date</label>
+                  <input
+                    type="date"
+                    value={scheduleMeta.startDate}
+                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, startDate: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">End Date</label>
+                  <input
+                    type="date"
+                    value={scheduleMeta.endDate}
+                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, endDate: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">Grid Start Time</label>
+                  <input
+                    type="time"
+                    value={scheduleMeta.startTime}
+                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, startTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-500">Grid End Time</label>
+                  <input
+                    type="time"
+                    value={scheduleMeta.endTime}
+                    onChange={(e) => updateScheduleMetaState({ ...scheduleMeta, endTime: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Data Backup / Export */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                <label className="block font-semibold text-slate-500">Backup & Recovery</label>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleExportJSON}
+                    className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1"
+                  >
+                    <Download size={14} />
+                    <span>Export JSON</span>
+                  </button>
+                  <label className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-1 cursor-pointer">
+                    <Upload size={14} />
+                    <span>Import JSON</span>
+                    <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md"
+                >
+                  Save Settings
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {}
+      {activeModal === 'batchDelete' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm rounded-2xl shadow-2xl border p-6 text-center ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400 mx-auto flex items-center justify-center mb-3">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 className="font-bold text-base mb-1">Confirm Batch Deletion</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Are you sure you want to permanently delete <strong>{selectedActivityIds.length}</strong> selected activities?
+            </p>
+            <div className="flex justify-center space-x-2 text-xs">
               <button
-                onClick={() => setShowAnalytics(false)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow"
+                onClick={() => setActiveModal(null)}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 font-medium"
               >
-                Close
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmBatchDelete}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md"
+              >
+                Delete Selected
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
