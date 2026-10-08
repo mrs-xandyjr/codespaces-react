@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Calendar, Clock, Plus, Trash2, Edit3, Share2, Settings,
   Sun, Moon, Tag, Filter, CheckSquare, Square, Maximize2, Download, Upload,
-  X, Check, Copy, ExternalLink, BarChart2, Eye, Lock, Move, AlertTriangle, CheckCircle2, AlertCircle, Layers
+  X, Check, Copy, ExternalLink, BarChart2, Eye, Lock, Move, AlertTriangle, 
+  CheckCircle2, AlertCircle, Layers, MapPin, Search, ChevronRight, Info,
+  AlertOctagon, Sparkles
 } from 'lucide-react';
 
-// Default pastel colors requested for Grade 7 through Grade 12
+// Default pastel colors for Grade 7 through Grade 12
 const DEFAULT_TAGS = [
   { id: 'tag-g7', name: 'Grade 7', color: '#a7f3d0', textColor: '#064e3b' },   // Pastel Green
   { id: 'tag-g8', name: 'Grade 8', color: '#fef08a', textColor: '#713f12' },   // Pastel Yellow
@@ -19,55 +21,90 @@ const DEFAULT_SCHEDULE_META = {
   title: 'YMSAT Schedule',
   startDate: '2027-01-20',
   endDate: '2027-01-27',
-  startTime: '07:00',
+  startTime: '06:00',
   endTime: '18:00'
 };
 
 const DEFAULT_ACTIVITIES = [
   {
     id: 'act-opening',
-    title: 'Opening Program',
+    title: 'Opening Ceremony & Keynote',
     date: '2027-01-20',
     startTime: '07:30',
     endTime: '08:30',
-    categoryIds: ['tag-g7', 'tag-g8', 'tag-g9', 'tag-g10', 'tag-g11', 'tag-g12'], // All 6 tags selected
-    notes: 'Welcome ceremony for all grade levels in the main auditorium.'
+    venue: 'Main Gym / Auditorium',
+    categoryIds: ['tag-g7', 'tag-g8', 'tag-g9', 'tag-g10', 'tag-g11', 'tag-g12'], // All 6 tags selected -> Striped styling
+    notes: 'Official inauguration for YMSAT Week with guest speaker.'
   },
   {
     id: 'act-stem-fair',
-    title: 'STEM Science Fair',
+    title: 'STEM Science Fair Judging',
     date: '2027-01-20',
     startTime: '08:00',
-    endTime: '10:00',
+    endTime: '10:30',
+    venue: 'Science Lab Complex',
     categoryIds: ['tag-g9', 'tag-g10'],
-    notes: 'Interactive science exhibits and student poster presentations.'
+    notes: 'Student science project exhibits and panel evaluation.'
   },
   {
     id: 'act-math-olympiad',
     title: 'Math Olympiad Contest',
     date: '2027-01-20',
     startTime: '08:30',
-    endTime: '10:30',
+    endTime: '11:00',
+    venue: 'Lecture Hall A',
     categoryIds: ['tag-g11', 'tag-g12'],
-    notes: 'Interschool mathematics speed-solving championship.'
+    notes: 'Interschool speed math solving championship.'
   },
   {
     id: 'act-robotics',
     title: 'Robotics Workshop',
     date: '2027-01-21',
     startTime: '09:00',
-    endTime: '11:00',
+    endTime: '11:30',
+    venue: 'Makerspace Studio',
     categoryIds: ['tag-g7', 'tag-g8'],
-    notes: 'Hands-on programming with sensor modules.'
+    notes: 'Hands-on microcontroller programming and sensor integration.'
+  },
+  {
+    id: 'act-astro-demo',
+    title: 'Astronomy & Optics Lab',
+    date: '2027-01-21',
+    startTime: '10:00',
+    endTime: '12:00',
+    venue: 'Lecture Hall A',
+    categoryIds: ['tag-g9', 'tag-g10'],
+    notes: 'Interactive stargazing equipment setup and optical physics.'
+  },
+  {
+    id: 'act-chem-show',
+    title: 'Chemistry Spectacular',
+    date: '2027-01-22',
+    startTime: '13:00',
+    endTime: '15:00',
+    venue: 'Main Gym / Auditorium',
+    categoryIds: ['tag-g7', 'tag-g8'],
+    notes: 'Live chemistry reaction demonstrations.'
+  },
+  {
+    id: 'act-research-symp',
+    title: 'Senior Research Symposium',
+    date: '2027-01-25',
+    startTime: '08:30',
+    endTime: '12:00',
+    venue: 'Conference Center',
+    categoryIds: ['tag-g11', 'tag-g12'],
+    notes: 'Oral presentations of senior capstone projects.'
   },
   {
     id: 'act-closing',
-    title: 'Awarding Ceremony',
+    title: 'Awarding & Closing Ceremony',
     date: '2027-01-27',
-    startTime: '15:00',
-    endTime: '17:00',
+    startTime: '14:00',
+    endTime: '16:30',
+    venue: 'Main Gym / Auditorium',
     categoryIds: ['tag-g7', 'tag-g8', 'tag-g9', 'tag-g10', 'tag-g11', 'tag-g12'],
-    notes: 'Closing ceremony and distribution of medals and trophies.'
+    notes: 'Distribution of trophies, certificates, and closing remarks.'
   }
 ];
 
@@ -142,9 +179,89 @@ const decodeScheduleFromURL = (encodedStr) => {
   }
 };
 
-const getTagBackgroundStyle = (categoryIds, tags) => {
+const detectConflicts = (activitiesList) => {
+  const conflictMap = {};
+
+  activitiesList.forEach(act => {
+    conflictMap[act.id] = { hasTagConflict: false, hasVenueConflict: false };
+  });
+
+  for (let i = 0; i < activitiesList.length; i++) {
+    for (let j = i + 1; j < activitiesList.length; j++) {
+      const act1 = activitiesList[i];
+      const act2 = activitiesList[j];
+
+      // Conflicts must be on the exact same date
+      if (act1.date !== act2.date) continue;
+
+      const start1 = timeToMinutes(act1.startTime);
+      const end1 = timeToMinutes(act1.endTime);
+      const start2 = timeToMinutes(act2.startTime);
+      const end2 = timeToMinutes(act2.endTime);
+
+      // Check time overlap: start1 < end2 AND start2 < end1
+      const isOverlapping = start1 < end2 && start2 < end1;
+
+      if (isOverlapping) {
+        // Tag Conflict: At least 1 shared tag
+        const commonTags = (act1.categoryIds || []).filter(id => (act2.categoryIds || []).includes(id));
+        if (commonTags.length > 0) {
+          conflictMap[act1.id].hasTagConflict = true;
+          conflictMap[act2.id].hasTagConflict = true;
+        }
+
+        // Venue Conflict: Non-empty, case-insensitive exact match
+        const venue1 = (act1.venue || '').trim().toLowerCase();
+        const venue2 = (act2.venue || '').trim().toLowerCase();
+
+        if (venue1 && venue2 && venue1 === venue2) {
+          conflictMap[act1.id].hasVenueConflict = true;
+          conflictMap[act2.id].hasVenueConflict = true;
+        }
+      }
+    }
+  }
+
+  return conflictMap;
+};
+
+const getTagBackgroundStyle = (categoryIds, tags, conflictState = {}) => {
+  const { hasTagConflict, hasVenueConflict } = conflictState;
+
+  // Dual conflict override: Black and White Zebra stripe
+  if (hasTagConflict && hasVenueConflict) {
+    return {
+      backgroundImage: 'repeating-linear-gradient(135deg, #0f172a 0px, #0f172a 12px, #ffffff 12px, #ffffff 24px)',
+      color: '#0f172a',
+      border: '2px solid #ef4444',
+      isConflictStyle: true
+    };
+  }
+
+  // Tag Conflict: SOLID BLACK block with WHITE text
+  if (hasTagConflict) {
+    return {
+      backgroundColor: '#09090b',
+      color: '#ffffff',
+      border: '2px solid #dc2626',
+      isConflictStyle: true
+    };
+  }
+
+  // Venue Conflict: SOLID WHITE block with BLACK text and dark bold outline
+  if (hasVenueConflict) {
+    return {
+      backgroundColor: '#ffffff',
+      color: '#09090b',
+      border: '2px solid #2563eb',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      isConflictStyle: true
+    };
+  }
+
+  // Default Tag Pastel Styling
   if (!categoryIds || categoryIds.length === 0) {
-    return { background: '#94a3b8', color: '#0f172a' };
+    return { backgroundColor: '#e2e8f0', color: '#0f172a' };
   }
 
   const matchedTags = categoryIds
@@ -152,18 +269,18 @@ const getTagBackgroundStyle = (categoryIds, tags) => {
     .filter(Boolean);
 
   if (matchedTags.length === 0) {
-    return { background: '#94a3b8', color: '#0f172a' };
+    return { backgroundColor: '#e2e8f0', color: '#0f172a' };
   }
 
   if (matchedTags.length === 1) {
     return {
-      background: matchedTags[0].color,
+      backgroundColor: matchedTags[0].color,
       color: matchedTags[0].textColor || '#0f172a'
     };
   }
 
   // Multi-tag repeating diagonal striped gradient generator
-  const stripeWidth = 20; // px
+  const stripeWidth = 18; // px
   const gradientStops = [];
   matchedTags.forEach((tag, index) => {
     const start = index * stripeWidth;
@@ -270,17 +387,18 @@ export default function App() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
 
-  // Modals
-  const [activeModal, setActiveModal] = useState(null); // 'activity', 'tags', 'share', 'analytics', 'dayView', 'batchDelete', 'settings'
+  // Modals state
+  const [activeModal, setActiveModal] = useState(null); // 'activity' | 'tags' | 'share' | 'analytics' | 'dayView' | 'batchDelete' | 'settings'
   const [editingActivity, setEditingActivity] = useState(null);
   const [selectedDayForView, setSelectedDayForView] = useState(null);
 
-  // Activity form
+  // Activity Form state
   const [activityForm, setActivityForm] = useState({
     title: '',
     date: '2027-01-20',
     startTime: '08:00',
     endTime: '09:00',
+    venue: '',
     categoryIds: [],
     notes: ''
   });
@@ -289,14 +407,12 @@ export default function App() {
   const [shareLinks, setShareLinks] = useState({ viewLink: '', editLink: '' });
 
   // Drag-and-Drop and Resize State
-  const [dragState, setDragState] = useState(null); 
-  // { actId, type: 'move'|'resize', startX, startY, origDate, origStartMins, origEndMins, tempDate, tempStartMins, tempEndMins }
+  const [dragState, setDragState] = useState(null);
 
-  // Grid container reference for drag offset calculations
+  // Grid container reference for offset calculations
   const gridRef = useRef(null);
-  const dayColumnRefs = useRef({});
 
-  // Toast notifications
+  // Toast notification state
   const [toastMessage, setToastMessage] = useState(null);
 
   const showToast = useCallback((text, type = 'info') => {
@@ -352,17 +468,24 @@ export default function App() {
     return slots;
   }, [gridStartMins, gridEndMins]);
 
+  // Compute conflicts across all activities
+  const conflictMap = useMemo(() => {
+    return detectConflicts(activities);
+  }, [activities]);
+
+  // Filter activities by search query
   const filteredActivities = useMemo(() => {
     if (!searchQuery.trim()) return activities;
     const q = searchQuery.toLowerCase();
     return activities.filter(act => {
       const matchesTitle = act.title.toLowerCase().includes(q);
+      const matchesVenue = act.venue && act.venue.toLowerCase().includes(q);
       const matchesNotes = act.notes && act.notes.toLowerCase().includes(q);
       const matchesTag = act.categoryIds.some(cid => {
         const tag = tags.find(t => t.id === cid);
         return tag && tag.name.toLowerCase().includes(q);
       });
-      return matchesTitle || matchesNotes || matchesTag;
+      return matchesTitle || matchesVenue || matchesNotes || matchesTag;
     });
   }, [activities, searchQuery, tags]);
 
@@ -477,6 +600,7 @@ export default function App() {
       date: defaultDate,
       startTime: '08:00',
       endTime: '09:00',
+      venue: '',
       categoryIds: [tags[0]?.id || 'tag-g7'],
       notes: ''
     });
@@ -491,6 +615,7 @@ export default function App() {
       date: act.date,
       startTime: act.startTime,
       endTime: act.endTime,
+      venue: act.venue || '',
       categoryIds: [...act.categoryIds],
       notes: act.notes || ''
     });
@@ -515,6 +640,7 @@ export default function App() {
         date: activityForm.date,
         startTime: activityForm.startTime,
         endTime: activityForm.endTime,
+        venue: activityForm.venue,
         categoryIds: activityForm.categoryIds,
         notes: activityForm.notes
       } : a));
@@ -526,6 +652,7 @@ export default function App() {
         date: activityForm.date,
         startTime: activityForm.startTime,
         endTime: activityForm.endTime,
+        venue: activityForm.venue,
         categoryIds: activityForm.categoryIds,
         notes: activityForm.notes
       };
@@ -680,7 +807,7 @@ export default function App() {
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'} transition-colors duration-200 font-sans pb-16`}>
       
-      {}
+      {/* Notification Toast */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl text-white font-medium text-xs transition-all animate-bounce ${
           toastMessage.type === 'error' ? 'bg-red-600' : toastMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
@@ -690,12 +817,12 @@ export default function App() {
         </div>
       )}
 
-      {}
+      {/* Read-Only Top Alert Banner */}
       {isReadOnly && (
         <div className="bg-amber-500 text-slate-950 px-4 py-2.5 text-xs font-semibold flex flex-wrap items-center justify-between shadow-md">
           <div className="flex items-center space-x-2">
             <Eye size={18} className="animate-pulse" />
-            <span>👁️ <strong>Read-Only Mode</strong> — You are viewing a read-only schedule. Editing and dragging features are locked.</span>
+            <span>👁️ <strong>Read-Only Shared View</strong> — You are viewing a shared YMSAT schedule. Dragging and editing features are locked.</span>
           </div>
           <button
             onClick={handleConvertToEditableCopy}
@@ -707,38 +834,41 @@ export default function App() {
         </div>
       )}
 
-      {}
+      {/* Header Bar */}
       <header className={`border-b ${darkMode ? 'border-slate-800 bg-slate-900/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3.5 shadow-sm`}>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           
-          {/* Logo & Title */}
+          {/* Logo & Schedule Meta Title */}
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2.5 rounded-xl text-white shadow-md shadow-blue-500/20">
               <Calendar size={22} />
             </div>
             <div>
-              <h1 className="font-extrabold text-lg leading-tight tracking-tight">{scheduleMeta.title}</h1>
+              <h1 className="font-extrabold text-lg leading-tight tracking-tight flex items-center space-x-2">
+                <span>{scheduleMeta.title}</span>
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-full">Jan 20-27</span>
+              </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {scheduleMeta.startDate} — {scheduleMeta.endDate}
+                {scheduleMeta.startDate} — {scheduleMeta.endDate} ({scheduleMeta.startTime} to {scheduleMeta.endTime})
               </p>
             </div>
           </div>
 
-          {/* Action Tools */}
+          {/* Action Tools Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Search Filter */}
+            {/* Search Input Filter */}
             <div className="relative flex-1 sm:w-44 md:w-52">
               <input
                 type="text"
-                placeholder="Filter activities..."
+                placeholder="Search activity, venue, tag..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-100 border-slate-200 text-slate-800'
                 }`}
               />
-              <Filter size={14} className="absolute left-2.5 top-2 text-slate-400" />
+              <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
@@ -765,7 +895,7 @@ export default function App() {
               className={`p-1.5 px-2.5 rounded-lg border text-xs font-medium flex items-center space-x-1 transition ${
                 darkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-100'
               }`}
-              title="Share Read-Only or Editable Link (Method 2)"
+              title="Share Read-Only or Editable Link (Method 2 URL Encoding)"
             >
               <Share2 size={15} className="text-amber-500" />
               <span className="hidden lg:inline">Share Link</span>
@@ -817,18 +947,17 @@ export default function App() {
         </div>
       </header>
 
-      {}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
         
-        {/* Pastel Grade Tags Legend */}
+        {/* Pastel Grade Tags Legend Bar */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center">
-            <Layers size={13} className="mr-1" /> Grade Tags:
+            <Layers size={13} className="mr-1" /> Tags:
           </span>
           {tags.map(tag => (
             <span
               key={tag.id}
-              className="inline-flex items-center space-x-1 text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs border border-black/10"
+              className="inline-flex items-center space-x-1 text-[11px] px-2.5 py-0.5 rounded-full font-bold shadow-xs border border-black/10"
               style={{ backgroundColor: tag.color, color: tag.textColor || '#0f172a' }}
             >
               <span>{tag.name}</span>
@@ -858,9 +987,9 @@ export default function App() {
 
       </div>
 
-      {}
+      {/* Floating Bottom Toolbar for Batch Mode */}
       {selectionMode && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-slate-950 border border-slate-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-4 text-xs font-medium">
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-slate-950 border border-slate-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-4 text-xs font-medium animate-bounce">
           <span>
             <strong className="text-blue-400 font-bold">{selectedActivityIds.length}</strong> items selected
           </span>
@@ -893,21 +1022,20 @@ export default function App() {
         </div>
       )}
 
-      {}
       <main className="max-w-7xl mx-auto px-4 lg:px-8 mt-1">
         <div className={`rounded-2xl border shadow-sm overflow-x-auto ${darkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}>
           <div className="min-w-[850px]">
             
-            {/* Interactive Day Headers Row */}
-            <div className={`grid grid-cols-8 border-b text-xs font-semibold ${darkMode ? 'border-slate-800 bg-slate-800/60 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+            {/* Interactive Day Column Headers Row */}
+            <div className={`grid grid-cols-9 border-b text-xs font-semibold ${darkMode ? 'border-slate-800 bg-slate-800/60 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
               
-              {/* Time axis header */}
+              {/* Time axis column header */}
               <div className="p-3 border-r border-slate-200 dark:border-slate-800 flex items-center justify-center space-x-1 text-slate-400">
                 <Clock size={14} />
                 <span>TIME</span>
               </div>
 
-              {/* Day Column Headers */}
+              {/* 8 Day Columns Headers (Jan 20 to Jan 27) */}
               {dateColumns.map((dateStr) => {
                 const dateObj = new Date(dateStr + 'T00:00:00');
                 const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
@@ -921,17 +1049,17 @@ export default function App() {
                       setSelectedDayForView(dateStr);
                       setActiveModal('dayView');
                     }}
-                    className="p-2.5 border-r last:border-r-0 border-slate-200 dark:border-slate-800 text-center cursor-pointer transition hover:bg-blue-50 dark:hover:bg-blue-950/40 group"
+                    className="p-2 border-r last:border-r-0 border-slate-200 dark:border-slate-800 text-center cursor-pointer transition hover:bg-blue-50 dark:hover:bg-blue-950/40 group"
                     title="Click for Expanded Single Day Detail View"
                   >
                     <div className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">{dayName}</div>
-                    <div className="font-extrabold text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center space-x-1">
+                    <div className="font-extrabold text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center space-x-0.5">
                       <span>{dayNum}</span>
                       <Maximize2 size={10} className="opacity-0 group-hover:opacity-100 transition text-blue-500" />
                     </div>
                     {dayActivitiesCount > 0 && (
-                      <span className="inline-block mt-1 text-[10px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full font-semibold">
-                        {dayActivitiesCount} activity{dayActivitiesCount > 1 ? 'ies' : ''}
+                      <span className="inline-block mt-0.5 text-[9px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full font-semibold">
+                        {dayActivitiesCount} act
                       </span>
                     )}
                   </div>
@@ -940,7 +1068,7 @@ export default function App() {
             </div>
 
             {/* Timetable Matrix Grid Body */}
-            <div ref={gridRef} className="relative grid grid-cols-8 divide-x divide-slate-200 dark:divide-slate-800 min-h-[550px] select-none">
+            <div ref={gridRef} className="relative grid grid-cols-9 divide-x divide-slate-200 dark:divide-slate-800 min-h-[550px] select-none">
               
               {/* Hourly Time Slot Axis */}
               <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-400 text-[11px] text-right pr-2">
@@ -959,7 +1087,6 @@ export default function App() {
                 return (
                   <div
                     key={dateStr}
-                    ref={el => dayColumnRefs.current[dateStr] = el}
                     className="relative divide-y divide-slate-100 dark:divide-slate-800/40"
                   >
                     
@@ -974,6 +1101,7 @@ export default function App() {
                               date: dateStr,
                               startTime: timeStr,
                               endTime: minutesToTime(timeToMinutes(timeStr) + 60),
+                              venue: '',
                               categoryIds: [tags[0]?.id || 'tag-g7'],
                               notes: ''
                             });
@@ -985,7 +1113,7 @@ export default function App() {
                       />
                     ))}
 
-                    {/* Rendered Activity Cards with Side-by-Side positioning */}
+                    {/* Rendered Activity Cards with Side-by-Side Overlap positioning */}
                     {layoutActs.map((act) => {
                       const isBeingDragged = dragState && dragState.actId === act.id;
                       
@@ -998,7 +1126,10 @@ export default function App() {
                       const heightPercent = (durationMins / totalGridMins) * 100;
 
                       const isSelected = selectedActivityIds.includes(act.id);
-                      const tagStyle = getTagBackgroundStyle(act.categoryIds, tags);
+                      
+                      // Fetch Conflict state for this activity
+                      const actConflict = conflictMap[act.id] || { hasTagConflict: false, hasVenueConflict: false };
+                      const tagStyle = getTagBackgroundStyle(act.categoryIds, tags, actConflict);
 
                       return (
                         <div
@@ -1013,59 +1144,87 @@ export default function App() {
                             position: 'absolute',
                             ...tagStyle
                           }}
-                          className={`rounded-xl p-2 text-xs shadow-md border border-black/10 overflow-hidden transition-shadow flex flex-col justify-between group z-10 ${
+                          className={`rounded-xl p-2 text-xs shadow-md border overflow-hidden transition-shadow flex flex-col justify-between group z-10 ${
                             isBeingDragged ? 'ring-4 ring-blue-500 shadow-2xl opacity-90 z-30 cursor-grabbing' : 'hover:z-20 hover:shadow-lg cursor-grab'
                           } ${isSelected ? 'ring-4 ring-amber-400' : ''}`}
                         >
-                          {/* Card Top Title & Quick Actions */}
-                          <div className="flex items-start justify-between gap-1 pointer-events-none">
-                            <div className="flex items-center space-x-1 overflow-hidden">
-                              {selectionMode && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleSelectActivity(act.id);
-                                  }}
-                                  className="pointer-events-auto text-slate-800 hover:text-black"
-                                >
-                                  {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                                </button>
+                          {/* Card Top Header: Title & Conflict Warning Badges */}
+                          <div>
+                            <div className="flex items-start justify-between gap-1 pointer-events-none">
+                              <div className="flex items-center space-x-1 overflow-hidden">
+                                {selectionMode && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleSelectActivity(act.id);
+                                    }}
+                                    className="pointer-events-auto text-slate-800 hover:text-black"
+                                  >
+                                    {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                                  </button>
+                                )}
+                                <span className="font-extrabold truncate drop-shadow-xs leading-tight">
+                                  {act.title}
+                                </span>
+                              </div>
+
+                              {!isReadOnly && !selectionMode && (
+                                <div className="opacity-0 group-hover:opacity-100 transition flex items-center space-x-0.5 bg-black/40 backdrop-blur-xs p-0.5 rounded-md pointer-events-auto">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditModal(act);
+                                    }}
+                                    className="p-0.5 text-white hover:text-blue-200"
+                                    title="Edit Activity"
+                                  >
+                                    <Edit3 size={11} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteSingleActivity(act.id);
+                                    }}
+                                    className="p-0.5 text-white hover:text-red-200"
+                                    title="Delete Activity"
+                                  >
+                                    <Trash2 size={11} />
+                                  </button>
+                                </div>
                               )}
-                              <span className="font-extrabold truncate drop-shadow-xs text-slate-900 leading-tight">
-                                {act.title}
-                              </span>
                             </div>
 
-                            {!isReadOnly && !selectionMode && (
-                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center space-x-0.5 bg-black/40 backdrop-blur-xs p-0.5 rounded-md pointer-events-auto">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenEditModal(act);
-                                  }}
-                                  className="p-0.5 text-white hover:text-blue-200"
-                                  title="Edit Activity"
-                                >
-                                  <Edit3 size={11} />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteSingleActivity(act.id);
-                                  }}
-                                  className="p-0.5 text-white hover:text-red-200"
-                                  title="Delete Activity"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
+                            {/* Conflict Badges */}
+                            {(actConflict.hasTagConflict || actConflict.hasVenueConflict) && (
+                              <div className="mt-1 flex flex-wrap gap-0.5 pointer-events-none">
+                                {actConflict.hasTagConflict && (
+                                  <span className="text-[8px] bg-red-600 text-white font-extrabold px-1 py-0.2 rounded flex items-center space-x-0.5 shadow-sm">
+                                    <AlertTriangle size={8} />
+                                    <span>TAG CONFLICT</span>
+                                  </span>
+                                )}
+                                {actConflict.hasVenueConflict && (
+                                  <span className="text-[8px] bg-blue-600 text-white font-extrabold px-1 py-0.2 rounded flex items-center space-x-0.5 shadow-sm">
+                                    <AlertOctagon size={8} />
+                                    <span>VENUE CONFLICT</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Venue Indicator */}
+                            {act.venue && (
+                              <div className="mt-0.5 text-[10px] font-semibold flex items-center space-x-0.5 opacity-90 truncate pointer-events-none">
+                                <MapPin size={10} className="shrink-0" />
+                                <span className="truncate">{act.venue}</span>
                               </div>
                             )}
                           </div>
 
                           {/* Time Stamp */}
-                          <div className="text-[10px] font-mono font-bold opacity-90 pointer-events-none flex items-center justify-between mt-0.5">
-                            <span className="bg-black/20 text-slate-900 px-1 py-0.2 rounded text-[9px] backdrop-blur-xs">
+                          <div className="text-[9px] font-mono font-bold opacity-90 pointer-events-none flex items-center justify-between mt-1">
+                            <span className="bg-black/20 text-current px-1 py-0.2 rounded backdrop-blur-xs">
                               {formatDisplayTime(minutesToTime(actStartMins))} - {formatDisplayTime(minutesToTime(actEndMins))}
                             </span>
                           </div>
@@ -1096,7 +1255,6 @@ export default function App() {
         </div>
       </main>
 
-      {}
       {activeModal === 'activity' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1123,6 +1281,22 @@ export default function App() {
                     darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-500">Venue / Location</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="e.g. Main Gym / Auditorium / Lecture Hall A"
+                    value={activityForm.venue}
+                    onChange={(e) => setActivityForm({ ...activityForm, venue: e.target.value })}
+                    className={`w-full pl-8 pr-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                      darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  />
+                  <MapPin size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                </div>
               </div>
 
               <div>
@@ -1170,7 +1344,7 @@ export default function App() {
               {/* Tag selection pills */}
               <div>
                 <label className="block font-semibold mb-1 text-slate-500">
-                  Grade Tags (Select multiple to generate a multi-colored diagonal pattern)
+                  Grade Level Tags (Multi-select generates striped styling)
                 </label>
                 <div className="flex flex-wrap gap-2 mt-1.5">
                   {tags.map(tag => {
@@ -1209,7 +1383,7 @@ export default function App() {
                 <label className="block font-semibold mb-1 text-slate-500">Notes / Details</label>
                 <textarea
                   rows={3}
-                  placeholder="Additional context or locations..."
+                  placeholder="Additional context or speaker details..."
                   value={activityForm.notes}
                   onChange={(e) => setActivityForm({ ...activityForm, notes: e.target.value })}
                   className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${
@@ -1238,10 +1412,9 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'dayView' && selectedDayForView && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-4 border-b pb-3 border-slate-200 dark:border-slate-800">
               <div>
                 <h3 className="font-extrabold text-lg text-blue-600 dark:text-blue-400 flex items-center space-x-2">
@@ -1250,81 +1423,119 @@ export default function App() {
                     {new Date(selectedDayForView + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400">Detailed Day Timeline View</p>
+                <p className="text-xs text-slate-400">Expanded Single Day Schedule Matrix</p>
               </div>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
               </button>
             </div>
 
-            {/* Side-by-side Overlapping Grid inside Day Modal */}
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            {/* Side-by-Side Overlapping Grid View inside Expanded Modal */}
+            <div className="max-h-[65vh] overflow-y-auto pr-1">
               {activities.filter(a => a.date === selectedDayForView).length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
                   <Clock size={32} className="mx-auto mb-2 opacity-50" />
                   <p>No activities scheduled for this day.</p>
                 </div>
               ) : (
-                computeOverlappingDayLayouts(activities.filter(a => a.date === selectedDayForView)).map((act) => {
-                  const tagStyle = getTagBackgroundStyle(act.categoryIds, tags);
-                  return (
-                    <div
-                      key={act.id}
-                      style={{ ...tagStyle }}
-                      className="rounded-xl p-3.5 shadow-md border border-black/10 text-slate-950 transition hover:scale-[1.01]"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-extrabold text-sm">{act.title}</h4>
-                          <div className="text-xs font-mono font-bold opacity-90 mt-0.5">
-                            {formatDisplayTime(act.startTime)} — {formatDisplayTime(act.endTime)}
-                          </div>
-                        </div>
-
-                        {!isReadOnly && (
-                          <div className="flex items-center space-x-1 bg-black/20 p-1 rounded-lg">
-                            <button
-                              onClick={() => handleOpenEditModal(act)}
-                              className="p-1 text-slate-900 hover:text-black"
-                              title="Edit"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSingleActivity(act.id)}
-                              className="p-1 text-slate-900 hover:text-red-700"
-                              title="Delete"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Grade tag badges */}
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {act.categoryIds.map(cid => {
-                          const tag = tags.find(t => t.id === cid);
-                          if (!tag) return null;
-                          return (
-                            <span
-                              key={tag.id}
-                              className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/20 text-slate-900"
-                            >
-                              {tag.name}
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      {act.notes && (
-                        <div className="mt-2.5 text-xs opacity-90 bg-black/10 p-2 rounded-lg font-medium">
-                          {act.notes}
-                        </div>
-                      )}
+                <div className="relative min-h-[450px] border rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  
+                  {/* Hourly background grid lines */}
+                  {timeSlots.map((timeStr) => (
+                    <div key={timeStr} className="h-14 flex items-start px-2 text-[10px] font-mono text-slate-400 border-b border-slate-100 dark:border-slate-800/60">
+                      {formatDisplayTime(timeStr)}
                     </div>
-                  );
-                })
+                  ))}
+
+                  {/* Overlapping side-by-side activity blocks */}
+                  {computeOverlappingDayLayouts(activities.filter(a => a.date === selectedDayForView)).map((act) => {
+                    const actStartMins = act.startMins;
+                    const actEndMins = act.endMins;
+
+                    const topPercent = Math.max(0, ((actStartMins - gridStartMins) / totalGridMins) * 100);
+                    const durationMins = Math.max(15, actEndMins - actStartMins);
+                    const heightPercent = (durationMins / totalGridMins) * 100;
+
+                    const actConflict = conflictMap[act.id] || { hasTagConflict: false, hasVenueConflict: false };
+                    const tagStyle = getTagBackgroundStyle(act.categoryIds, tags, actConflict);
+
+                    return (
+                      <div
+                        key={act.id}
+                        style={{
+                          top: `${topPercent}%`,
+                          height: `${heightPercent}%`,
+                          left: `calc(${act.leftPercent}% + 4px)`,
+                          width: `calc(${act.widthPercent}% - 8px)`,
+                          position: 'absolute',
+                          ...tagStyle
+                        }}
+                        className="rounded-xl p-3 shadow-md border overflow-hidden transition hover:scale-[1.01] flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between">
+                            <h4 className="font-extrabold text-xs sm:text-sm leading-tight">{act.title}</h4>
+                            {!isReadOnly && (
+                              <button
+                                onClick={() => handleOpenEditModal(act)}
+                                className="p-1 rounded hover:bg-black/20 text-current"
+                                title="Edit"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Venue info */}
+                          {act.venue && (
+                            <div className="text-[11px] font-semibold flex items-center space-x-1 mt-0.5 opacity-90">
+                              <MapPin size={12} />
+                              <span>{act.venue}</span>
+                            </div>
+                          )}
+
+                          {/* Conflict Warnings */}
+                          {(actConflict.hasTagConflict || actConflict.hasVenueConflict) && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {actConflict.hasTagConflict && (
+                                <span className="text-[9px] bg-red-600 text-white font-extrabold px-1.5 py-0.5 rounded flex items-center space-x-0.5">
+                                  <AlertTriangle size={10} />
+                                  <span>TAG CONFLICT</span>
+                                </span>
+                              )}
+                              {actConflict.hasVenueConflict && (
+                                <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1.5 py-0.5 rounded flex items-center space-x-0.5">
+                                  <AlertOctagon size={10} />
+                                  <span>VENUE CONFLICT</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Badges & Time Stamp */}
+                        <div className="mt-2 flex flex-wrap items-center justify-between text-[10px] font-mono font-bold gap-1">
+                          <span className="bg-black/20 text-current px-1.5 py-0.5 rounded">
+                            {formatDisplayTime(act.startTime)} - {formatDisplayTime(act.endTime)}
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {act.categoryIds.map(cid => {
+                              const tag = tags.find(t => t.id === cid);
+                              if (!tag) return null;
+                              return (
+                                <span key={tag.id} className="bg-black/20 text-current px-1.5 py-0.2 rounded font-bold">
+                                  {tag.name}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+
+                </div>
               )}
             </div>
 
@@ -1349,14 +1560,13 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'share' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-xl rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base flex items-center space-x-2">
                 <Share2 size={18} className="text-amber-500" />
-                <span>Shareable Links (Method 2 URL Encoding)</span>
+                <span>Shareable URL Links (Method 2 URL Encoding)</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1364,7 +1574,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-              All schedule data is encoded directly into these links. Anyone can open them instantly without setting up a server or database!
+              All schedule data is encoded directly into these links. Anyone can open them instantly without a backend server!
             </p>
 
             <div className="space-y-4 text-xs">
@@ -1436,14 +1646,13 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'tags' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-base flex items-center space-x-2">
                 <Tag size={18} className="text-emerald-500" />
-                <span>Grade Level Tags Manager</span>
+                <span>Grade Tag & Pastel Color Manager</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1512,7 +1721,6 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'analytics' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-lg rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1533,7 +1741,7 @@ export default function App() {
               </div>
               <div className={`p-3 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-blue-50 border-blue-100'}`}>
                 <div className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">{analyticsData.totalActivities}</div>
-                <div className="text-[11px] text-slate-500 font-medium font-medium">Scheduled Activities</div>
+                <div className="text-[11px] text-slate-500 font-medium">Scheduled Activities</div>
               </div>
             </div>
 
@@ -1564,7 +1772,6 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'settings' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1653,9 +1860,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* JSON Backup section */}
+              {/* Offline JSON Backup section */}
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                <label className="block font-semibold text-slate-500">Offline JSON Backup</label>
+                <label className="block font-semibold text-slate-500">Offline Backup File</label>
                 <div className="flex space-x-2">
                   <button
                     type="button"
@@ -1688,7 +1895,6 @@ export default function App() {
         </div>
       )}
 
-      {}
       {activeModal === 'batchDelete' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-sm rounded-2xl shadow-2xl border p-6 text-center ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
