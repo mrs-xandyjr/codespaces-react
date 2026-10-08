@@ -5,10 +5,10 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown
+  ChevronDown, ChevronLeft, ChevronRight, Sliders
 } from 'lucide-react';
 
-// Firebase credentials provided for Method 3 Cloud Synchronization
+// Firebase credentials for Method 3 Cloud Synchronization
 const firebaseConfig = {
   apiKey: "AIzaSyBY6uRgGySpqdtoZqhktEwOBv1XSrUC8oE",
   authDomain: "ymsat2027-sched.firebaseapp.com",
@@ -35,10 +35,6 @@ const EVENT_DATES = [
   { id: '2027-01-26', label: 'Jan 26, 2027', dayName: 'Tuesday' },
   { id: '2027-01-27', label: 'Jan 27, 2027', dayName: 'Wednesday' },
 ];
-
-const GRID_START_MINS = 360;  // 6:00 AM
-const GRID_END_MINS = 1080;   // 6:00 PM
-const TOTAL_GRID_MINS = GRID_END_MINS - GRID_START_MINS; // 720 minutes (12 hours)
 
 // Preset Pastel Grade Level Tags
 const DEFAULT_TAGS = [
@@ -237,6 +233,33 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const [tags, setTags] = useState(DEFAULT_TAGS);
 
+  // Dynamic Date and Time Display Range States
+  const [startDateFilter, setStartDateFilter] = useState('2027-01-20');
+  const [endDateFilter, setEndDateFilter] = useState('2027-01-27');
+  const [gridStartTime, setGridStartTime] = useState('06:00'); // 6:00 AM
+  const [gridEndTime, setGridEndTime] = useState('18:00');   // 6:00 PM
+  const [isRangeSettingsOpen, setIsRangeSettingsOpen] = useState(false);
+
+  // Derived Range Math
+  const currentStartMins = useMemo(() => timeToMins(gridStartTime), [gridStartTime]);
+  const currentEndMins = useMemo(() => Math.max(timeToMins(gridEndTime), currentStartMins + 60), [gridEndTime, currentStartMins]);
+  const totalGridMins = useMemo(() => currentEndMins - currentStartMins, [currentStartMins, currentEndMins]);
+
+  // Ref to store time range for mouse move listeners
+  const timeRangeRef = useRef({ startMins: 360, endMins: 1080, totalMins: 720 });
+  useEffect(() => {
+    timeRangeRef.current = {
+      startMins: currentStartMins,
+      endMins: currentEndMins,
+      totalMins: totalGridMins
+    };
+  }, [currentStartMins, currentEndMins, totalGridMins]);
+
+  // Filtered Display Dates based on Range Selection
+  const displayedDates = useMemo(() => {
+    return EVENT_DATES.filter(d => d.id >= startDateFilter && d.id <= endDateFilter);
+  }, [startDateFilter, endDateFilter]);
+
   // Ref to access current activities inside global window event listeners
   const activitiesRef = useRef(activities);
   useEffect(() => {
@@ -244,7 +267,7 @@ export default function App() {
   }, [activities]);
 
   // Sync & Sharing States
-  const [syncStatus, setSyncStatus] = useState('connecting'); // 'connecting', 'synced', 'local', 'error'
+  const [syncStatus, setSyncStatus] = useState('connecting');
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [readOnlyBanner, setReadOnlyBanner] = useState(false);
 
@@ -262,7 +285,7 @@ export default function App() {
   const [editingActivity, setEditingActivity] = useState(null);
   const [expandedDay, setExpandedDay] = useState(null); // '2027-01-20' or null
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState(null); // { title, message, onConfirm }
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [shareToast, setShareToast] = useState(false);
 
   // Tag Management State
@@ -402,7 +425,7 @@ export default function App() {
     }
   };
 
-  // Effect 4: Global Mouse Event Listener for Cross-Date and Cross-Time Drag & Resize
+  // Effect 4: Global Mouse Event Listener for Drag & Resize with Dynamic Time Bounds
   useEffect(() => {
     if (!draggingAct || isReadOnly) return;
 
@@ -415,10 +438,11 @@ export default function App() {
       const offsetY = e.clientY - rect.top;
       const percentage = Math.max(0, Math.min(1, offsetY / rect.height));
 
-      const currentMins = snapTo5Mins(GRID_START_MINS + percentage * TOTAL_GRID_MINS);
+      const { startMins, endMins, totalMins } = timeRangeRef.current;
+      const currentMins = snapTo5Mins(startMins + percentage * totalMins);
 
       if (draggingAct.isResize) {
-        const newEndMins = Math.max(draggingAct.initialStartMins + 15, Math.min(GRID_END_MINS, currentMins));
+        const newEndMins = Math.max(draggingAct.initialStartMins + 15, Math.min(endMins, currentMins));
         const newEndTime = minsToTime(newEndMins);
 
         setActivities(prev => prev.map(a => a.id === draggingAct.actId ? { ...a, endTime: newEndTime } : a));
@@ -426,8 +450,8 @@ export default function App() {
         const duration = draggingAct.initialEndMins - draggingAct.initialStartMins;
         let newStartMins = snapTo5Mins(currentMins - draggingAct.grabOffsetMins);
 
-        if (newStartMins < GRID_START_MINS) newStartMins = GRID_START_MINS;
-        if (newStartMins + duration > GRID_END_MINS) newStartMins = GRID_END_MINS - duration;
+        if (newStartMins < startMins) newStartMins = startMins;
+        if (newStartMins + duration > endMins) newStartMins = endMins - duration;
 
         const newEndMins = newStartMins + duration;
 
@@ -474,13 +498,11 @@ export default function App() {
     const newName = tagNameInput.trim();
 
     if (editingTagId) {
-      // Edit Tag
       const oldTag = tags.find(t => t.id === editingTagId);
       const oldName = oldTag ? oldTag.name : '';
 
       const updatedTags = tags.map(t => t.id === editingTagId ? { ...t, name: newName, color: tagColorInput } : t);
 
-      // Cascade tag name update across activities if renamed
       let updatedActivities = activities;
       if (oldName && oldName !== newName) {
         updatedActivities = activities.map(act => ({
@@ -492,7 +514,6 @@ export default function App() {
 
       saveToCloud(updatedActivities, updatedTags);
     } else {
-      // Add New Tag
       if (tags.some(t => t.name.toLowerCase() === newName.toLowerCase())) {
         alert("A tag with this name already exists.");
         return;
@@ -532,7 +553,7 @@ export default function App() {
     setFormTitle('');
     setFormDate(defaultDate);
     setFormStartTime(defaultStart);
-    const endMins = Math.min(timeToMins(defaultStart) + 60, GRID_END_MINS);
+    const endMins = Math.min(timeToMins(defaultStart) + 60, currentEndMins);
     setFormEndTime(minsToTime(endMins));
     setFormVenue('');
     setFormDescription('');
@@ -641,7 +662,7 @@ export default function App() {
     if (columnEl && !isResize) {
       const rect = columnEl.getBoundingClientRect();
       const offsetY = e.clientY - rect.top;
-      const pointerMins = GRID_START_MINS + (offsetY / rect.height) * TOTAL_GRID_MINS;
+      const pointerMins = currentStartMins + (offsetY / rect.height) * totalGridMins;
       const actStartMins = timeToMins(act.startTime);
       grabOffsetMins = pointerMins - actStartMins;
     }
@@ -689,6 +710,20 @@ export default function App() {
     return Array.from(set);
   }, [activities]);
 
+  // Hourly ticks computation for dynamic timeline
+  const hourTicks = useMemo(() => {
+    const ticks = [];
+    const startHour = Math.floor(currentStartMins / 60);
+    const endHour = Math.ceil(currentEndMins / 60);
+    for (let h = startHour; h <= endHour; h++) {
+      const mins = h * 60;
+      if (mins >= currentStartMins && mins <= currentEndMins) {
+        ticks.push(mins);
+      }
+    }
+    return ticks;
+  }, [currentStartMins, currentEndMins]);
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
 
@@ -721,7 +756,9 @@ export default function App() {
               <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent">
                 YMSAT Schedule Planner
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Jan 20 – Jan 27, 2027 • 6:00 AM – 6:00 PM</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {EVENT_DATES.find(d => d.id === startDateFilter)?.label} – {EVENT_DATES.find(d => d.id === endDateFilter)?.label} • {format12H(gridStartTime)} – {format12H(gridEndTime)}
+              </p>
             </div>
 
             <div className="ml-2">
@@ -749,7 +786,7 @@ export default function App() {
           <div className="flex items-center space-x-2">
             {!isReadOnly && (
               <button
-                onClick={() => openAddActivityModal()}
+                onClick={() => openAddActivityModal(startDateFilter)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium shadow-sm transition flex items-center space-x-1.5"
               >
                 <Plus className="w-4 h-4" />
@@ -799,7 +836,7 @@ export default function App() {
         <div className={`p-3.5 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
 
           {/* Search Box */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -815,8 +852,21 @@ export default function App() {
             )}
           </div>
 
-          {/* Expandable Tag Filter Dropdown Menu & Manage Tags */}
+          {/* Date & Time Range Controls Dropdown Toggle */}
           <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsRangeSettingsOpen(!isRangeSettingsOpen)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center space-x-1.5 transition ${
+                isRangeSettingsOpen
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : darkMode ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Display Range</span>
+            </button>
+
+            {/* Tag Filter Menu */}
             <div className="relative" ref={filterMenuRef}>
               <button
                 onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
@@ -943,6 +993,66 @@ export default function App() {
           )}
         </div>
 
+        {/* Collapsible Custom Date & Time Range Panel */}
+        {isRangeSettingsOpen && (
+          <div className={`p-4 rounded-xl border shadow-sm transition-all ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100/90 border-slate-300'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end`}>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Display Start Date</label>
+              <select
+                value={startDateFilter}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  setStartDateFilter(newStart);
+                  if (newStart > endDateFilter) setEndDateFilter(newStart);
+                }}
+                className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'}`}
+              >
+                {EVENT_DATES.map(d => (
+                  <option key={d.id} value={d.id}>{d.label} ({d.dayName})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Display End Date</label>
+              <select
+                value={endDateFilter}
+                onChange={(e) => {
+                  const newEnd = e.target.value;
+                  if (newEnd >= startDateFilter) setEndDateFilter(newEnd);
+                }}
+                className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'}`}
+              >
+                {EVENT_DATES.filter(d => d.id >= startDateFilter).map(d => (
+                  <option key={d.id} value={d.id}>{d.label} ({d.dayName})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Grid Start Time</label>
+              <input
+                type="time"
+                step="1800"
+                value={gridStartTime}
+                onChange={(e) => setGridStartTime(e.target.value)}
+                className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-mono font-semibold ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'}`}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Grid End Time</label>
+              <input
+                type="time"
+                step="1800"
+                value={gridEndTime}
+                onChange={(e) => setGridEndTime(e.target.value)}
+                className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-mono font-semibold ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-800'}`}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Conflict Warning Summary Banner */}
         {conflictSummary.total > 0 && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-rose-700 dark:text-rose-300 gap-2">
@@ -959,14 +1069,17 @@ export default function App() {
         )}
 
         <div className={`rounded-xl border shadow-sm overflow-x-auto ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="min-w-[1100px]">
+          <div className="min-w-[1000px]">
 
-            {/* Date Header Row */}
-            <div className={`grid grid-cols-[80px_repeat(8,1fr)] border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
+            {/* Dynamic Date Header Row */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))` }}
+              className={`border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
+            >
               <div className="p-3 flex items-center justify-center border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-400">
                 Time
               </div>
-              {EVENT_DATES.map((d) => {
+              {displayedDates.map((d) => {
                 const dayActCount = filteredActivities.filter(a => a.date === d.id).length;
                 return (
                   <div key={d.id} className="p-2.5 border-r border-slate-200 dark:border-slate-800 flex flex-col items-center justify-between group">
@@ -981,7 +1094,7 @@ export default function App() {
                       <button
                         onClick={() => setExpandedDay(d.id)}
                         className="text-blue-500 hover:text-blue-600 p-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition"
-                        title="Expand Single Day View"
+                        title="Expand Full-Screen Single Day View"
                       >
                         <Maximize2 className="w-3 h-3" />
                       </button>
@@ -992,13 +1105,15 @@ export default function App() {
             </div>
 
             {/* Time Grid Layout Body */}
-            <div className="relative grid grid-cols-[80px_repeat(8,1fr)] h-[720px] select-none">
+            <div
+              style={{ display: 'grid', gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))` }}
+              className="relative h-[720px] select-none"
+            >
 
-              {/* Left Time Markers Column */}
+              {/* Left Dynamic Time Markers Column */}
               <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-[11px] text-slate-400">
-                {Array.from({ length: 13 }).map((_, idx) => {
-                  const mins = GRID_START_MINS + idx * 60;
-                  const topPercent = (idx / 12) * 100;
+                {hourTicks.map((mins) => {
+                  const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
                   return (
                     <div
                       key={mins}
@@ -1011,8 +1126,8 @@ export default function App() {
                 })}
               </div>
 
-              {/* 8 Day Event Columns */}
-              {EVENT_DATES.map((d) => {
+              {/* Displayed Event Columns */}
+              {displayedDates.map((d) => {
                 const dayActivities = filteredActivities.filter(a => a.date === d.id);
                 const layoutedActivities = computeOverlappingDayLayouts(dayActivities);
 
@@ -1024,18 +1139,21 @@ export default function App() {
                     className="relative border-r border-slate-200 dark:border-slate-800 h-full group/col"
                   >
                     {/* Hourly Horizontal Grid Lines */}
-                    {Array.from({ length: 12 }).map((_, idx) => (
-                      <div
-                        key={idx}
-                        style={{ top: `${(idx / 12) * 100}%` }}
-                        className="absolute left-0 right-0 border-t border-slate-100 dark:border-slate-800/60 pointer-events-none"
-                      />
-                    ))}
+                    {hourTicks.map((mins) => {
+                      const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
+                      return (
+                        <div
+                          key={mins}
+                          style={{ top: `${topPercent}%` }}
+                          className="absolute left-0 right-0 border-t border-slate-100 dark:border-slate-800/60 pointer-events-none"
+                        />
+                      );
+                    })}
 
                     {/* Quick Add Hover Trigger */}
                     {!isReadOnly && !batchMode && !draggingAct && (
                       <div
-                        onClick={() => openAddActivityModal(d.id, '09:00')}
+                        onClick={() => openAddActivityModal(d.id, gridStartTime)}
                         className="absolute inset-0 bg-blue-500/0 hover:bg-blue-500/5 transition cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100"
                       >
                         <span className="bg-blue-600 text-white text-[11px] px-2 py-1 rounded shadow font-medium flex items-center space-x-1">
@@ -1050,8 +1168,11 @@ export default function App() {
                       const startMins = timeToMins(act.startTime);
                       const endMins = timeToMins(act.endTime);
 
-                      const topPercent = ((startMins - GRID_START_MINS) / TOTAL_GRID_MINS) * 100;
-                      const heightPercent = ((endMins - startMins) / TOTAL_GRID_MINS) * 100;
+                      // Hide cards outside current visible time range
+                      if (endMins <= currentStartMins || startMins >= currentEndMins) return null;
+
+                      const topPercent = Math.max(0, ((startMins - currentStartMins) / totalGridMins) * 100);
+                      const heightPercent = ((Math.min(endMins, currentEndMins) - Math.max(startMins, currentStartMins)) / totalGridMins) * 100;
 
                       const conflicts = conflictMap.get(act.id) || { tagConflict: false, venueConflict: false };
                       const isTagConf = conflicts.tagConflict;
@@ -1268,7 +1389,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Time (5-min step)</label>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Time</label>
                   <input
                     type="time"
                     step="300"
@@ -1506,48 +1627,94 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 3: Expanded Single Day View Modal */}
+      {/* MODAL 3: FULL-WIDTH Full-Screen Single Day View Modal */}
       {expandedDay && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className={`w-full max-w-4xl h-[90vh] rounded-2xl border shadow-2xl flex flex-col p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <div className="flex items-center justify-between border-b pb-4 border-slate-200 dark:border-slate-800">
-              <div>
-                <h2 className="text-xl font-bold flex items-center space-x-2">
-                  <Calendar className="w-6 h-6 text-blue-600" />
-                  <span>{EVENT_DATES.find(d => d.id === expandedDay)?.label} - Single Day Focus</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Full resolution view with side-by-side overlap rendering.
-                </p>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
+          <div className={`w-full h-full max-w-none rounded-2xl border shadow-2xl flex flex-col p-4 sm:p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800 gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-600 p-2 rounded-xl text-white">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold flex items-center space-x-2">
+                    <span>Full Day View — {EVENT_DATES.find(d => d.id === expandedDay)?.label}</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Showing {format12H(gridStartTime)} to {format12H(gridEndTime)} full screen
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setExpandedDay(null)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                <X className="w-6 h-6" />
-              </button>
+
+              {/* Date Switcher within Full Screen Day View */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    const idx = EVENT_DATES.findIndex(d => d.id === expandedDay);
+                    if (idx > 0) setExpandedDay(EVENT_DATES[idx - 1].id);
+                  }}
+                  disabled={EVENT_DATES.findIndex(d => d.id === expandedDay) === 0}
+                  className="p-1.5 rounded-lg border dark:border-slate-700 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <select
+                  value={expandedDay}
+                  onChange={(e) => setExpandedDay(e.target.value)}
+                  className={`px-3 py-1 text-xs rounded-lg border font-bold ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
+                >
+                  {EVENT_DATES.map(d => (
+                    <option key={d.id} value={d.id}>{d.label} ({d.dayName})</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => {
+                    const idx = EVENT_DATES.findIndex(d => d.id === expandedDay);
+                    if (idx < EVENT_DATES.length - 1) setExpandedDay(EVENT_DATES[idx + 1].id);
+                  }}
+                  disabled={EVENT_DATES.findIndex(d => d.id === expandedDay) === EVENT_DATES.length - 1}
+                  className="p-1.5 rounded-lg border dark:border-slate-700 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                <button onClick={() => setExpandedDay(null)} className="p-1.5 rounded-lg border dark:border-slate-700 hover:bg-red-500/10 hover:text-red-500 transition ml-2">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto mt-4 pr-2 relative">
-              <div className="relative grid grid-cols-[80px_1fr] h-[1000px] select-none border rounded-xl overflow-hidden">
+            <div className="flex-1 overflow-y-auto mt-4 pr-1 relative">
+              <div className="relative grid grid-cols-[80px_1fr] h-[1000px] select-none border rounded-xl overflow-hidden w-full">
                 <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-xs text-slate-400 bg-slate-50 dark:bg-slate-950">
-                  {Array.from({ length: 13 }).map((_, idx) => {
-                    const mins = GRID_START_MINS + idx * 60;
+                  {hourTicks.map((mins) => {
+                    const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
                     return (
-                      <div key={mins} style={{ top: `${(idx / 12) * 100}%` }} className="absolute left-0 right-0 -translate-y-1/2 text-center font-medium">
+                      <div key={mins} style={{ top: `${topPercent}%` }} className="absolute left-0 right-0 -translate-y-1/2 text-center font-medium pr-1">
                         {format12H(minsToTime(mins))}
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="relative h-full">
-                  {Array.from({ length: 12 }).map((_, idx) => (
-                    <div key={idx} style={{ top: `${(idx / 12) * 100}%` }} className="absolute left-0 right-0 border-t border-slate-200 dark:border-slate-800/60" />
-                  ))}
+                <div className="relative h-full w-full">
+                  {hourTicks.map((mins) => {
+                    const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
+                    return (
+                      <div key={mins} style={{ top: `${topPercent}%` }} className="absolute left-0 right-0 border-t border-slate-200 dark:border-slate-800/60" />
+                    );
+                  })}
 
                   {computeOverlappingDayLayouts(filteredActivities.filter(a => a.date === expandedDay)).map(act => {
                     const startMins = timeToMins(act.startTime);
                     const endMins = timeToMins(act.endTime);
-                    const topPercent = ((startMins - GRID_START_MINS) / TOTAL_GRID_MINS) * 100;
-                    const heightPercent = ((endMins - startMins) / TOTAL_GRID_MINS) * 100;
+
+                    if (endMins <= currentStartMins || startMins >= currentEndMins) return null;
+
+                    const topPercent = Math.max(0, ((startMins - currentStartMins) / totalGridMins) * 100);
+                    const heightPercent = ((Math.min(endMins, currentEndMins) - Math.max(startMins, currentStartMins)) / totalGridMins) * 100;
 
                     const multiBg = getMultiTagBackground(act.tags, tags);
 
@@ -1561,27 +1728,28 @@ export default function App() {
                           width: `${act.width}%`,
                           background: multiBg
                         }}
-                        className="absolute rounded-lg p-2.5 border border-slate-300 shadow-md text-slate-900 flex flex-col justify-between"
+                        className="absolute rounded-lg p-3 border border-slate-300 shadow-md text-slate-900 flex flex-col justify-between transition-all hover:shadow-lg"
                       >
                         <div>
-                          <div className="font-bold text-sm">{act.title}</div>
-                          <div className="text-xs font-mono font-medium opacity-90 mt-0.5">
-                            {format12H(act.startTime)} - {format12H(act.endTime)}
+                          <div className="font-bold text-sm sm:text-base">{act.title}</div>
+                          <div className="text-xs font-mono font-medium opacity-90 mt-0.5 flex items-center space-x-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{format12H(act.startTime)} - {format12H(act.endTime)}</span>
                           </div>
                           {act.venue && (
-                            <div className="text-xs font-semibold flex items-center space-x-1 mt-1">
-                              <MapPin className="w-3 h-3 text-rose-600" />
+                            <div className="text-xs font-semibold flex items-center space-x-1 mt-1 text-rose-800">
+                              <MapPin className="w-3.5 h-3.5" />
                               <span>{act.venue}</span>
                             </div>
                           )}
                           {act.description && (
-                            <p className="text-xs mt-1.5 line-clamp-2 opacity-80">{act.description}</p>
+                            <p className="text-xs mt-1.5 opacity-90 line-clamp-3">{act.description}</p>
                           )}
                         </div>
 
                         <div className="flex flex-wrap gap-1 mt-2">
                           {act.tags.map(t => (
-                            <span key={t} className="bg-white/90 text-slate-900 text-[10px] px-1.5 py-0.5 rounded font-bold border border-slate-300">
+                            <span key={t} className="bg-white/90 text-slate-900 text-[10px] px-2 py-0.5 rounded-md font-bold border border-slate-300 shadow-xs">
                               {t}
                             </span>
                           ))}
