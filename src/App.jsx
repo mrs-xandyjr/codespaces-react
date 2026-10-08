@@ -5,7 +5,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2
 } from 'lucide-react';
 
 // Firebase credentials for Method 3 Cloud Synchronization
@@ -240,6 +240,11 @@ export default function App() {
   const [gridEndTime, setGridEndTime] = useState('18:00');   // 6:00 PM
   const [isRangeSettingsOpen, setIsRangeSettingsOpen] = useState(false);
 
+  // Undo / Redo History Stacks (Capped at 10 items)
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const dragSnapshotRef = useRef(null);
+
   // Derived Range Math
   const currentStartMins = useMemo(() => timeToMins(gridStartTime), [gridStartTime]);
   const currentEndMins = useMemo(() => Math.max(timeToMins(gridEndTime), currentStartMins + 60), [gridEndTime, currentStartMins]);
@@ -260,11 +265,16 @@ export default function App() {
     return EVENT_DATES.filter(d => d.id >= startDateFilter && d.id <= endDateFilter);
   }, [startDateFilter, endDateFilter]);
 
-  // Ref to access current activities inside global window event listeners
+  // Refs to access current activities/tags inside global event listeners
   const activitiesRef = useRef(activities);
   useEffect(() => {
     activitiesRef.current = activities;
   }, [activities]);
+
+  const tagsRef = useRef(tags);
+  useEffect(() => {
+    tagsRef.current = tags;
+  }, [tags]);
 
   // Sync & Sharing States
   const [syncStatus, setSyncStatus] = useState('connecting');
@@ -405,9 +415,20 @@ export default function App() {
     }
   }, [activities, tags]);
 
-  // Push updates to Firestore
-  const saveToCloud = async (newActivities, newTags = tags) => {
+  // Push updates to Firestore with Undo/Redo History Stacking
+  const saveToCloud = async (newActivities, newTags = tags, recordHistory = true) => {
     if (isReadOnly) return;
+
+    if (recordHistory) {
+      const snapshotToPush = dragSnapshotRef.current || {
+        activities: [...activitiesRef.current],
+        tags: [...tagsRef.current]
+      };
+      setUndoStack(prev => [...prev.slice(-9), snapshotToPush]);
+      setRedoStack([]);
+      dragSnapshotRef.current = null;
+    }
+
     setActivities(newActivities);
     setTags(newTags);
 
@@ -424,6 +445,66 @@ export default function App() {
       setSyncStatus('local');
     }
   };
+
+  // Undo Handler
+  const handleUndo = () => {
+    if (undoStack.length === 0 || isReadOnly) return;
+
+    const previousState = undoStack[undoStack.length - 1];
+    const newUndoStack = undoStack.slice(0, undoStack.length - 1);
+
+    const currentState = {
+      activities: [...activitiesRef.current],
+      tags: [...tagsRef.current]
+    };
+
+    setRedoStack(prev => [...prev.slice(-9), currentState]);
+    setUndoStack(newUndoStack);
+
+    saveToCloud(previousState.activities, previousState.tags, false);
+  };
+
+  // Redo Handler
+  const handleRedo = () => {
+    if (redoStack.length === 0 || isReadOnly) return;
+
+    const nextState = redoStack[redoStack.length - 1];
+    const newRedoStack = redoStack.slice(0, redoStack.length - 1);
+
+    const currentState = {
+      activities: [...activitiesRef.current],
+      tags: [...tagsRef.current]
+    };
+
+    setUndoStack(prev => [...prev.slice(-9), currentState]);
+    setRedoStack(newRedoStack);
+
+    saveToCloud(nextState.activities, nextState.tags, false);
+  };
+
+  // Keyboard Shortcuts Listener (Ctrl+Z / Cmd+Z, Ctrl+Y / Cmd+Y / Cmd+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (isReadOnly) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undoStack, redoStack, isReadOnly]);
 
   // Effect 4: Global Mouse Event Listener for Drag & Resize with Dynamic Time Bounds
   useEffect(() => {
@@ -656,6 +737,12 @@ export default function App() {
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
 
+    // Store pre-drag snapshot for Undo history
+    dragSnapshotRef.current = {
+      activities: [...activitiesRef.current],
+      tags: [...tagsRef.current]
+    };
+
     const columnEl = e.currentTarget.closest('[data-day-column="true"]');
     let grabOffsetMins = 0;
 
@@ -785,13 +872,42 @@ export default function App() {
 
           <div className="flex items-center space-x-2">
             {!isReadOnly && (
-              <button
-                onClick={() => openAddActivityModal(startDateFilter)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium shadow-sm transition flex items-center space-x-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Activity</span>
-              </button>
+              <>
+                <div className="flex items-center space-x-1 border-r pr-2 border-slate-200 dark:border-slate-800">
+                  <button
+                    onClick={handleUndo}
+                    disabled={undoStack.length === 0}
+                    className={`p-2 rounded-lg border transition ${
+                      undoStack.length === 0
+                        ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
+                        : darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                    title="Undo Action (Ctrl+Z)"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={redoStack.length === 0}
+                    className={`p-2 rounded-lg border transition ${
+                      redoStack.length === 0
+                        ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
+                        : darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                    title="Redo Action (Ctrl+Y / Ctrl+Shift+Z)"
+                  >
+                    <Redo2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => openAddActivityModal(startDateFilter)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium shadow-sm transition flex items-center space-x-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Activity</span>
+                </button>
+              </>
             )}
 
             <button
