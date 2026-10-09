@@ -1856,7 +1856,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 3: FULL-WIDTH Full-Screen Single Day View Modal */}
+      {/* MODAL 3: FULL-WIDTH Full-Screen Single Day View Modal (Draggable & Resizable Enabled) */}
       {expandedDay && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 print-modal-container">
           <div className={`w-full h-full max-w-none rounded-2xl border shadow-2xl flex flex-col p-4 sm:p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1883,7 +1883,7 @@ export default function App() {
                     <span>Full Day View — {activeExpandedDayObj?.label} ({activeExpandedDayObj?.dayName})</span>
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Showing {format12H(gridStartTime)} to {format12H(gridEndTime)} full screen
+                    Showing {format12H(gridStartTime)} to {format12H(gridEndTime)} • Drag cards to reschedule or resize duration
                   </p>
                 </div>
               </div>
@@ -1950,13 +1950,31 @@ export default function App() {
                   })}
                 </div>
 
-                <div className="relative h-full w-full">
+                {/* Day Column Target with Drag Tracking Data Attributes */}
+                <div
+                  data-day-column="true"
+                  data-day-id={expandedDay}
+                  className="relative h-full w-full"
+                >
                   {hourTicks.map((mins) => {
                     const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
                     return (
-                      <div key={mins} style={{ top: `${topPercent}%` }} className="absolute left-0 right-0 border-t border-slate-200 dark:border-slate-800/60" />
+                      <div key={mins} style={{ top: `${topPercent}%` }} className="absolute left-0 right-0 border-t border-slate-200 dark:border-slate-800/60 pointer-events-none" />
                     );
                   })}
+
+                  {/* Quick Add Hover Trigger for Single Day View */}
+                  {!isReadOnly && !batchMode && !draggingAct && (
+                    <div
+                      onClick={() => openAddActivityModal(expandedDay, gridStartTime)}
+                      className="absolute inset-0 bg-blue-500/0 hover:bg-blue-500/5 transition cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100 no-print z-0"
+                    >
+                      <span className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-md font-medium flex items-center space-x-1.5">
+                        <Plus className="w-4 h-4" />
+                        <span>Add Activity to {activeExpandedDayObj?.label}</span>
+                      </span>
+                    </div>
+                  )}
 
                   {computeOverlappingDayLayouts(filteredActivities.filter(a => a.date === expandedDay)).map(act => {
                     const startMins = timeToMins(act.startTime);
@@ -1968,6 +1986,15 @@ export default function App() {
                     const heightPercent = ((Math.min(endMins, currentEndMins) - Math.max(startMins, currentStartMins)) / totalGridMins) * 100;
 
                     const multiBg = getMultiTagBackground(act.tags, tags);
+                    const isBeingDragged = draggingAct?.actId === act.id;
+
+                    let cardClasses = "absolute rounded-lg p-3 border border-slate-300 shadow-md text-slate-900 flex flex-col justify-between transition-all hover:shadow-lg group/daycard select-none ";
+                    if (!isReadOnly && !batchMode) {
+                      cardClasses += "cursor-grab active:cursor-grabbing ";
+                    }
+                    if (isBeingDragged) {
+                      cardClasses += "z-30 opacity-90 ring-2 ring-blue-500 shadow-2xl scale-[1.01] ";
+                    }
 
                     return (
                       <div
@@ -1979,20 +2006,45 @@ export default function App() {
                           width: `${act.width}%`,
                           background: multiBg
                         }}
-                        className="absolute rounded-lg p-3 border border-slate-300 shadow-md text-slate-900 flex flex-col justify-between transition-all hover:shadow-lg"
+                        onMouseDown={(e) => handleMouseDown(e, act, false)}
+                        className={cardClasses}
                       >
                         <div>
-                          <div className="font-bold text-sm sm:text-base">{act.title}</div>
-                          <div className="text-xs font-mono font-medium opacity-90 mt-0.5 flex items-center space-x-1">
-                            <Clock className="w-3.5 h-3.5" />
+                          <div className="flex items-start justify-between gap-1">
+                            <div className="font-bold text-sm sm:text-base leading-snug">{act.title}</div>
+
+                            {!isReadOnly && !batchMode && (
+                              <div className="opacity-0 group-hover/daycard:opacity-100 flex items-center space-x-1 bg-slate-900/80 text-white rounded p-1 transition no-print">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openEditActivityModal(act); }}
+                                  className="p-0.5 hover:text-blue-400"
+                                  title="Edit Activity"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteActivity(act.id); }}
+                                  className="p-0.5 hover:text-red-400"
+                                  title="Delete Activity"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-xs font-mono font-medium opacity-90 mt-1 flex items-center space-x-1">
+                            <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                             <span>{format12H(act.startTime)} - {format12H(act.endTime)}</span>
                           </div>
+
                           {act.venue && (
                             <div className="text-xs font-semibold flex items-center space-x-1 mt-1 text-rose-800">
-                              <MapPin className="w-3.5 h-3.5" />
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                               <span>{act.venue}</span>
                             </div>
                           )}
+
                           {act.description && (
                             <p className="text-xs mt-1.5 opacity-90 line-clamp-3">{act.description}</p>
                           )}
@@ -2005,6 +2057,15 @@ export default function App() {
                             </span>
                           ))}
                         </div>
+
+                        {/* Bottom Edge Resize Handle for Single Day View */}
+                        {!isReadOnly && !batchMode && (
+                          <div
+                            onMouseDown={(e) => handleMouseDown(e, act, true)}
+                            className="absolute bottom-0 left-0 right-0 h-2.5 cursor-ns-resize hover:bg-blue-600/60 rounded-b-lg no-print"
+                            title="Drag to Resize Duration (5-min precision)"
+                          />
+                        )}
                       </div>
                     );
                   })}
