@@ -1424,10 +1424,11 @@ export default function App() {
                       </span>
                       <button
                         onClick={() => setExpandedDay(d.id)}
-                        className="text-blue-500 hover:text-blue-600 p-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition"
+                        className="text-blue-500 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
                         title="Expand Full-Screen Single Day View"
                       >
-                        <Maximize2 className="w-3 h-3" />
+                        <Maximize2 className="w-2.5 h-2.5" />
+                        <span>Expand</span>
                       </button>
                     </div>
                   </div>
