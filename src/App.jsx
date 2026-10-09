@@ -5,7 +5,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer
 } from 'lucide-react';
 
 // Firebase credentials for Method 3 Cloud Synchronization
@@ -26,7 +26,7 @@ const FIREBASE_DOC_PATH = "ymsat2027";
 
 // Schedule dates from January 20 to January 27, 2027 (8 Days)
 const EVENT_DATES = [
-    { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
+   { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
   { id: '2027-01-22', label: 'Jan 22, 2027', dayName: 'Friday' },
   { id: '2027-01-23', label: 'Jan 23, 2027', dayName: 'Saturday' },
   { id: '2027-01-24', label: 'Jan 24, 2027', dayName: 'Sunday' },
@@ -160,7 +160,6 @@ function detectConflicts(activities) {
 function computeOverlappingDayLayouts(dayActivities) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
-  // Sort chronologically first to partition into overlapping clusters
   const sorted = [...dayActivities].sort((a, b) => {
     const aStart = timeToMins(a.startTime);
     const bStart = timeToMins(b.startTime);
@@ -192,7 +191,6 @@ function computeOverlappingDayLayouts(dayActivities) {
   const layoutResults = [];
 
   clusters.forEach(cluster => {
-    // Sort cluster items primarily by 1st Tag Priority (Grade 7 -> Grade 8 -> ... -> Guests)
     const sortedCluster = [...cluster].sort((a, b) => {
       const aPrio = getTagPriority(a);
       const bPrio = getTagPriority(b);
@@ -770,6 +768,10 @@ export default function App() {
     });
   };
 
+  const handleTriggerPrint = () => {
+    window.print();
+  };
+
   const handleMouseDown = (e, act, isResize = false) => {
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
@@ -848,12 +850,53 @@ export default function App() {
     return ticks;
   }, [currentStartMins, currentEndMins]);
 
+  const activeExpandedDayObj = useMemo(() => {
+    return EVENT_DATES.find(d => d.id === expandedDay);
+  }, [expandedDay]);
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
 
+      {/* Global CSS for Clean Printing */}
+      <style>{`
+        @media print {
+          body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          header, footer, .no-print, button, input, select {
+            display: none !important;
+          }
+          .print-header-banner {
+            display: block !important;
+          }
+          .print-modal-container {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            background: white !important;
+            color: black !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: auto;
+            margin: 12mm;
+          }
+        }
+      `}</style>
+
       {/* Read-Only Mode Amber Alert Banner */}
       {readOnlyBanner && (
-        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2.5 flex items-center justify-between shadow-md">
+        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2.5 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center space-x-2">
             <Eye className="w-5 h-5 animate-pulse" />
             <span>👁️ <strong>Read-Only Shared View</strong> — You are viewing a read-only snapshot. Editing is currently locked.</span>
@@ -869,7 +912,7 @@ export default function App() {
       )}
 
       {/* Main App Navigation Header */}
-      <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm`}>
+      <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm no-print`}>
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
 
           <div className="flex items-center space-x-3">
@@ -948,6 +991,15 @@ export default function App() {
             )}
 
             <button
+              onClick={handleTriggerPrint}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition flex items-center space-x-1.5 ${darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'}`}
+              title="Print Schedule Grid"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print Schedule</span>
+            </button>
+
+            <button
               onClick={handleShareReadOnlyLink}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition flex items-center space-x-1.5 ${darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'}`}
               title="Copy Read-Only Share Link"
@@ -977,16 +1029,24 @@ export default function App() {
 
       {/* Share Link Toast Notification */}
       {shareToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2 border border-slate-700 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2 border border-slate-700 animate-bounce no-print">
           <Check className="w-5 h-5 text-emerald-400" />
           <span className="text-sm font-medium">Read-Only Link copied to clipboard!</span>
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 space-y-4">
+      {/* Print-Only Header Banner for Multi-Day Schedule */}
+      <div className="hidden print-header-banner p-4 border-b-2 border-slate-900 mb-4 text-slate-900">
+        <h1 className="text-2xl font-bold tracking-tight">YMSAT 2027 Schedule Planner</h1>
+        <p className="text-sm font-semibold text-slate-700 mt-0.5">
+          Date Range: {EVENT_DATES.find(d => d.id === startDateFilter)?.label} to {EVENT_DATES.find(d => d.id === endDateFilter)?.label} ({format12H(gridStartTime)} – {format12H(gridEndTime)})
+        </p>
+      </div>
+
+      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 space-y-4 ${expandedDay ? 'no-print' : ''}`}>
 
         {/* Toolbar Bar */}
-        <div className={`p-3.5 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`p-3.5 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 no-print ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
 
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px]">
@@ -1148,7 +1208,7 @@ export default function App() {
 
         {/* Collapsible Custom Date & Time Range Panel */}
         {isRangeSettingsOpen && (
-          <div className={`p-4 rounded-xl border shadow-sm transition-all ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100/90 border-slate-300'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end`}>
+          <div className={`p-4 rounded-xl border shadow-sm transition-all no-print ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100/90 border-slate-300'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end`}>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Display Start Date</label>
               <select
@@ -1208,7 +1268,7 @@ export default function App() {
 
         {/* Conflict Warning Summary Banner */}
         {conflictSummary.total > 0 && (
-          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-rose-700 dark:text-rose-300 gap-2">
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-rose-700 dark:text-rose-300 gap-2 no-print">
             <div className="flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
               <span>
@@ -1240,7 +1300,7 @@ export default function App() {
                       <div className="font-bold text-slate-900 dark:text-slate-100">{d.label}</div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">{d.dayName}</div>
                     </div>
-                    <div className="mt-1 flex items-center justify-between w-full px-1">
+                    <div className="mt-1 flex items-center justify-between w-full px-1 no-print">
                       <span className="text-[10px] bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded-full text-slate-600 dark:text-slate-400 font-mono">
                         {dayActCount} {dayActCount === 1 ? 'act' : 'acts'}
                       </span>
@@ -1307,7 +1367,7 @@ export default function App() {
                     {!isReadOnly && !batchMode && !draggingAct && (
                       <div
                         onClick={() => openAddActivityModal(d.id, gridStartTime)}
-                        className="absolute inset-0 bg-blue-500/0 hover:bg-blue-500/5 transition cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100"
+                        className="absolute inset-0 bg-blue-500/0 hover:bg-blue-500/5 transition cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100 no-print"
                       >
                         <span className="bg-blue-600 text-white text-[11px] px-2 py-1 rounded shadow font-medium flex items-center space-x-1">
                           <Plus className="w-3 h-3" />
@@ -1393,7 +1453,7 @@ export default function App() {
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => { }}
-                                  className="rounded border-slate-400 text-blue-600 focus:ring-0"
+                                  className="rounded border-slate-400 text-blue-600 focus:ring-0 no-print"
                                 />
                               )}
                             </div>
@@ -1438,7 +1498,7 @@ export default function App() {
                           </div>
 
                           {!isReadOnly && !batchMode && (
-                            <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 flex items-center space-x-0.5 bg-slate-900/80 text-white rounded p-0.5 transition">
+                            <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 flex items-center space-x-0.5 bg-slate-900/80 text-white rounded p-0.5 transition no-print">
                               <button
                                 onClick={(e) => { e.stopPropagation(); openEditActivityModal(act); }}
                                 className="p-0.5 hover:text-blue-400"
@@ -1459,7 +1519,7 @@ export default function App() {
                           {!isReadOnly && !batchMode && (
                             <div
                               onMouseDown={(e) => handleMouseDown(e, act, true)}
-                              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/50"
+                              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/50 no-print"
                               title="Drag to Resize Duration (5-min precision)"
                             />
                           )}
@@ -1473,7 +1533,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className={`p-4 rounded-xl border shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`p-4 rounded-xl border shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 no-print ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Scheduled Activities</div>
             <div className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{activities.length}</div>
@@ -1502,7 +1562,7 @@ export default function App() {
 
       {/* MODAL 1: Add/Edit Activity Modal */}
       {isActivityModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
               <h2 className="text-lg font-bold flex items-center space-x-2">
@@ -1656,7 +1716,7 @@ export default function App() {
 
       {/* MODAL 2: Manage Tags Add / Edit Modal */}
       {isTagModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
               <h2 className="text-lg font-bold flex items-center space-x-2">
@@ -1782,16 +1842,29 @@ export default function App() {
 
       {/* MODAL 3: FULL-WIDTH Full-Screen Single Day View Modal */}
       {expandedDay && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 print-modal-container">
           <div className={`w-full h-full max-w-none rounded-2xl border shadow-2xl flex flex-col p-4 sm:p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800 gap-4">
+
+            {/* Print Header Visible ONLY on Print Output */}
+            <div className="hidden print:block border-b-2 border-slate-900 pb-3 mb-4 text-slate-900">
+              <h1 className="text-2xl font-black uppercase tracking-wide">YMSAT 2027 — Single Day View</h1>
+              <div className="text-lg font-bold text-blue-700 mt-1">
+                📅 {activeExpandedDayObj?.label} ({activeExpandedDayObj?.dayName})
+              </div>
+              <div className="text-xs text-slate-600 mt-0.5 font-mono">
+                Daily Schedule Window: {format12H(gridStartTime)} to {format12H(gridEndTime)}
+              </div>
+            </div>
+
+            {/* On-Screen Modal Header (Hidden on Print) */}
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800 gap-4 no-print">
               <div className="flex items-center space-x-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold flex items-center space-x-2">
-                    <span>Full Day View — {EVENT_DATES.find(d => d.id === expandedDay)?.label}</span>
+                    <span>Full Day View — {activeExpandedDayObj?.label} ({activeExpandedDayObj?.dayName})</span>
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Showing {format12H(gridStartTime)} to {format12H(gridEndTime)} full screen
@@ -1799,8 +1872,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Date Switcher within Full Screen Day View */}
+              {/* Date Switcher & Print Controls */}
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleTriggerPrint}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  title="Print This Single Day Schedule"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Day View</span>
+                </button>
+
                 <button
                   onClick={() => {
                     const idx = EVENT_DATES.findIndex(d => d.id === expandedDay);
@@ -1839,7 +1921,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto mt-4 pr-1 relative">
+            <div className="flex-1 overflow-y-auto mt-4 pr-1 relative print:overflow-visible">
               <div className="relative grid grid-cols-[80px_1fr] h-[1000px] select-none border rounded-xl overflow-hidden w-full">
                 <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-xs text-slate-400 bg-slate-50 dark:bg-slate-950">
                   {hourTicks.map((mins) => {
@@ -1919,7 +2001,7 @@ export default function App() {
 
       {/* MODAL 4: Settings & JSON Backup Import/Export Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
               <h2 className="text-lg font-bold flex items-center space-x-2">
@@ -2007,7 +2089,7 @@ export default function App() {
 
       {/* MODAL 5: Custom Confirmation Dialog */}
       {confirmDialog && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center space-x-2 text-amber-500 mb-2">
               <ShieldAlert className="w-6 h-6" />
@@ -2035,7 +2117,7 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-200 dark:border-slate-800 mt-auto">
+      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-200 dark:border-slate-800 mt-auto no-print">
         YMSAT 2027 Schedule Planner • Powered by Firebase Firestore Real-Time Sync
       </footer>
     </div>
