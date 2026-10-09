@@ -277,6 +277,10 @@ export default function App() {
   const [gridEndTime, setGridEndTime] = useState('18:00');   // 6:00 PM
   const [isRangeSettingsOpen, setIsRangeSettingsOpen] = useState(false);
 
+  // Hover 1-Second Activity Details Popover State
+  const [hoverPopover, setHoverPopover] = useState(null);
+  const hoverTimerRef = useRef(null);
+
   // Undo / Redo History Stacks (Capped at 10 items)
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -451,6 +455,40 @@ export default function App() {
       localStorage.setItem('ymsat_2027_schedule', JSON.stringify({ activities, tags }));
     }
   }, [activities, tags]);
+
+  // Mouse Enter & Leave Handlers for 1-Second Details Hover Feature
+  const handleActivityMouseEnter = (e, act) => {
+    if (draggingAct) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    hoverTimerRef.current = setTimeout(() => {
+      const popoverWidth = 280;
+      const popoverHeight = 240;
+
+      let x = rect.right + 10;
+      if (x + popoverWidth > window.innerWidth) {
+        x = Math.max(10, rect.left - popoverWidth - 10);
+      }
+
+      let y = Math.max(10, Math.min(rect.top, window.innerHeight - popoverHeight - 10));
+
+      setHoverPopover({
+        act,
+        x,
+        y
+      });
+    }, 1000); // 1-second hover delay
+  };
+
+  const handleActivityMouseLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setHoverPopover(null);
+  };
 
   // Push updates to Firestore with Undo/Redo History Stacking
   const saveToCloud = async (newActivities, newTags = tags, recordHistory = true) => {
@@ -775,6 +813,7 @@ export default function App() {
   };
 
   const handleMouseDown = (e, act, isResize = false) => {
+    handleActivityMouseLeave(); // Clear hover popover during mouse interaction
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
 
@@ -909,6 +948,69 @@ export default function App() {
           }
         }
       `}</style>
+
+      {/* 1-Second Hover Activity Details Floating Popover Card */}
+      {hoverPopover && (
+        <div
+          style={{ top: `${hoverPopover.y}px`, left: `${hoverPopover.x}px` }}
+          className={`fixed z-50 w-72 p-4 rounded-xl shadow-2xl border transition-opacity duration-200 pointer-events-none no-print ${
+            darkMode ? 'bg-slate-900/95 border-slate-700 text-slate-100' : 'bg-white/95 border-slate-300 text-slate-800'
+          }`}
+        >
+          <div className="flex items-center space-x-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 mb-1.5">
+            <Info className="w-4 h-4 flex-shrink-0" />
+            <span>Activity Overview</span>
+          </div>
+
+          <h4 className="font-bold text-sm leading-snug mb-2.5 text-slate-900 dark:text-slate-100">
+            {hoverPopover.act.title}
+          </h4>
+
+          <div className="space-y-2 text-xs font-medium">
+            <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span>
+                {EVENT_DATES.find(d => d.id === hoverPopover.act.date)?.label} ({EVENT_DATES.find(d => d.id === hoverPopover.act.date)?.dayName})
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300 font-mono">
+              <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span>{format12H(hoverPopover.act.startTime)} – {format12H(hoverPopover.act.endTime)}</span>
+            </div>
+
+            {hoverPopover.act.venue && (
+              <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400 font-semibold">
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{hoverPopover.act.venue}</span>
+              </div>
+            )}
+
+            {hoverPopover.act.description && (
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed line-clamp-4">
+                {hoverPopover.act.description}
+              </div>
+            )}
+
+            {hoverPopover.act.tags && hoverPopover.act.tags.length > 0 && (
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-1">
+                {hoverPopover.act.tags.map(tName => {
+                  const tagObj = tags.find(t => t.name === tName);
+                  return (
+                    <span
+                      key={tName}
+                      style={{ backgroundColor: tagObj ? tagObj.color : '#cbd5e1' }}
+                      className="text-slate-900 text-[10px] px-2 py-0.5 rounded font-bold border border-slate-300/50 shadow-xs"
+                    >
+                      {tName}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Read-Only Mode Amber Alert Banner */}
       {readOnlyBanner && (
@@ -1446,6 +1548,8 @@ export default function App() {
                             width: `${act.width}%`,
                             ...cardStyle
                           }}
+                          onMouseEnter={(e) => handleActivityMouseEnter(e, act)}
+                          onMouseLeave={handleActivityMouseLeave}
                           onMouseDown={(e) => handleMouseDown(e, act, false)}
                           onClick={(e) => {
                             if (batchMode) {
