@@ -26,17 +26,27 @@ const FIREBASE_DOC_PATH = "ymsat2027";
 
 // Schedule dates from January 20 to January 27, 2027 (8 Days)
 const EVENT_DATES = [
-  { id: '2027-01-20', label: 'Jan 20, 2027', dayName: 'Wednesday' },
-  { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
+    { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
   { id: '2027-01-22', label: 'Jan 22, 2027', dayName: 'Friday' },
   { id: '2027-01-23', label: 'Jan 23, 2027', dayName: 'Saturday' },
   { id: '2027-01-24', label: 'Jan 24, 2027', dayName: 'Sunday' },
   { id: '2027-01-25', label: 'Jan 25, 2027', dayName: 'Monday' },
   { id: '2027-01-26', label: 'Jan 26, 2027', dayName: 'Tuesday' },
-  { id: '2027-01-27', label: 'Jan 27, 2027', dayName: 'Wednesday' },
 ];
 
-// Preset Pastel Grade Level Tags
+// Priority Order for Left-to-Right Overlapping Layout Snap
+const TAG_ORDER_PRIORITY = [
+  'Grade 7',
+  'Grade 8',
+  'Grade 9',
+  'Grade 10',
+  'Grade 11',
+  'Grade 12',
+  'Guests (Students)',
+  'Guests (Teachers)'
+];
+
+// Preset Pastel Tags including Guest categories
 const DEFAULT_TAGS = [
   { id: 'tag-g7', name: 'Grade 7', color: '#a7f3d0' },  // pastel green
   { id: 'tag-g8', name: 'Grade 8', color: '#fef08a' },  // pastel yellow
@@ -44,6 +54,8 @@ const DEFAULT_TAGS = [
   { id: 'tag-g10', name: 'Grade 10', color: '#93c5fd' }, // pastel blue
   { id: 'tag-g11', name: 'Grade 11', color: '#fbcfe8' }, // pastel pink
   { id: 'tag-g12', name: 'Grade 12', color: '#fed7aa' }, // pastel orange
+  { id: 'tag-gs', name: 'Guests (Students)', color: '#ddd6fe' }, // pastel purple
+  { id: 'tag-gt', name: 'Guests (Teachers)', color: '#bae6fd' }, // pastel cyan
 ];
 
 const PASTEL_PALETTE = [
@@ -93,6 +105,14 @@ function snapTo5Mins(mins) {
   return Math.round(mins / 5) * 5;
 }
 
+// Helper to evaluate activity priority index based on 1st tag
+function getTagPriority(act) {
+  if (!act.tags || act.tags.length === 0) return 999;
+  const firstTag = act.tags[0];
+  const idx = TAG_ORDER_PRIORITY.indexOf(firstTag);
+  return idx !== -1 ? idx : 500; // Fallback position for custom tags
+}
+
 /**
  * Detects Tag Conflicts (shared tags on time overlap) and Venue Conflicts (shared venue on time overlap)
  */
@@ -134,11 +154,13 @@ function detectConflicts(activities) {
 }
 
 /**
- * Computes side-by-side layout metrics for overlapping concurrent activities on a single date
+ * Computes side-by-side layout metrics for overlapping concurrent activities on a single date,
+ * snapping left-to-right order according to Tag Priority.
  */
 function computeOverlappingDayLayouts(dayActivities) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
+  // Sort chronologically first to partition into overlapping clusters
   const sorted = [...dayActivities].sort((a, b) => {
     const aStart = timeToMins(a.startTime);
     const bStart = timeToMins(b.startTime);
@@ -170,10 +192,25 @@ function computeOverlappingDayLayouts(dayActivities) {
   const layoutResults = [];
 
   clusters.forEach(cluster => {
+    // Sort cluster items primarily by 1st Tag Priority (Grade 7 -> Grade 8 -> ... -> Guests)
+    const sortedCluster = [...cluster].sort((a, b) => {
+      const aPrio = getTagPriority(a);
+      const bPrio = getTagPriority(b);
+      if (aPrio !== bPrio) return aPrio - bPrio;
+
+      const aStart = timeToMins(a.startTime);
+      const bStart = timeToMins(b.startTime);
+      if (aStart !== bStart) return aStart - bStart;
+
+      const aDur = timeToMins(a.endTime) - aStart;
+      const bDur = timeToMins(b.endTime) - bStart;
+      return bDur - aDur;
+    });
+
     const columns = [];
     const actColumnMap = new Map();
 
-    cluster.forEach(act => {
+    sortedCluster.forEach(act => {
       const actStart = timeToMins(act.startTime);
       const actEnd = timeToMins(act.endTime);
 
@@ -196,7 +233,7 @@ function computeOverlappingDayLayouts(dayActivities) {
 
     const totalCols = columns.length;
 
-    cluster.forEach(act => {
+    sortedCluster.forEach(act => {
       const colIdx = actColumnMap.get(act.id);
       const width = 100 / totalCols;
       const left = colIdx * width;
