@@ -277,9 +277,14 @@ export default function App() {
   const [gridEndTime, setGridEndTime] = useState('18:00');   // 6:00 PM
   const [isRangeSettingsOpen, setIsRangeSettingsOpen] = useState(false);
 
-  // Hover 1-Second Activity Details Popover State
+  // Calendar Width & Height Scaling States (100% to 500%)
+  const [gridWidthScale, setGridWidthScale] = useState(100);
+  const [gridHeightScale, setGridHeightScale] = useState(100);
+
+  // Hover 1-Second Activity Details Popover State with Hover Delay Timers
   const [hoverPopover, setHoverPopover] = useState(null);
   const hoverTimerRef = useRef(null);
+  const popoverLeaveTimerRef = useRef(null);
 
   // Undo / Redo History Stacks (Capped at 10 items)
   const [undoStack, setUndoStack] = useState([]);
@@ -456,16 +461,17 @@ export default function App() {
     }
   }, [activities, tags]);
 
-  // Mouse Enter & Leave Handlers for 1-Second Details Hover Feature
+  // Mouse Enter & Leave Handlers for Interactive 1-Second Details Hover Popover
   const handleActivityMouseEnter = (e, act) => {
     if (draggingAct) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (popoverLeaveTimerRef.current) clearTimeout(popoverLeaveTimerRef.current);
 
     const rect = e.currentTarget.getBoundingClientRect();
 
     hoverTimerRef.current = setTimeout(() => {
       const popoverWidth = 280;
-      const popoverHeight = 240;
+      const popoverHeight = 280;
 
       let x = rect.right + 10;
       if (x + popoverWidth > window.innerWidth) {
@@ -479,7 +485,7 @@ export default function App() {
         x,
         y
       });
-    }, 1000); // 1-second hover delay
+    }, 1000); // 1-second hover trigger delay
   };
 
   const handleActivityMouseLeave = () => {
@@ -487,6 +493,19 @@ export default function App() {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
     }
+    popoverLeaveTimerRef.current = setTimeout(() => {
+      setHoverPopover(null);
+    }, 250);
+  };
+
+  const handlePopoverMouseEnter = () => {
+    if (popoverLeaveTimerRef.current) {
+      clearTimeout(popoverLeaveTimerRef.current);
+      popoverLeaveTimerRef.current = null;
+    }
+  };
+
+  const handlePopoverMouseLeave = () => {
     setHoverPopover(null);
   };
 
@@ -813,7 +832,10 @@ export default function App() {
   };
 
   const handleMouseDown = (e, act, isResize = false) => {
-    handleActivityMouseLeave(); // Clear hover popover during mouse interaction
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (popoverLeaveTimerRef.current) clearTimeout(popoverLeaveTimerRef.current);
+    setHoverPopover(null);
+
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
 
@@ -921,7 +943,7 @@ export default function App() {
             min-width: 100% !important;
             width: 100% !important;
           }
-          .relative.h-\\[720px\\] {
+          .relative.h-\\[500px\\] {
             height: 820px !important;
           }
           .relative.h-\\[1000px\\] {
@@ -949,17 +971,36 @@ export default function App() {
         }
       `}</style>
 
-      {/* 1-Second Hover Activity Details Floating Popover Card */}
+      {/* Interactive 1-Second Hover Activity Details Floating Popover Card with Edit Button */}
       {hoverPopover && (
         <div
           style={{ top: `${hoverPopover.y}px`, left: `${hoverPopover.x}px` }}
-          className={`fixed z-50 w-72 p-4 rounded-xl shadow-2xl border transition-opacity duration-200 pointer-events-none no-print ${
+          onMouseEnter={handlePopoverMouseEnter}
+          onMouseLeave={handlePopoverMouseLeave}
+          className={`fixed z-50 w-72 p-4 rounded-xl shadow-2xl border transition-opacity duration-200 pointer-events-auto no-print ${
             darkMode ? 'bg-slate-900/95 border-slate-700 text-slate-100' : 'bg-white/95 border-slate-300 text-slate-800'
           }`}
         >
-          <div className="flex items-center space-x-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 mb-1.5">
-            <Info className="w-4 h-4 flex-shrink-0" />
-            <span>Activity Overview</span>
+          <div className="flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400 mb-1.5">
+            <div className="flex items-center space-x-1.5">
+              <Info className="w-4 h-4 flex-shrink-0" />
+              <span>Activity Overview</span>
+            </div>
+            {!isReadOnly && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const actToEdit = hoverPopover.act;
+                  setHoverPopover(null);
+                  openEditActivityModal(actToEdit);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-0.5 rounded font-semibold transition flex items-center space-x-1 shadow-xs"
+                title="Edit Activity Details"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+            )}
           </div>
 
           <h4 className="font-bold text-sm leading-snug mb-2.5 text-slate-900 dark:text-slate-100">
@@ -1029,9 +1070,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Main App Navigation Header */}
+      {/* Main App Navigation Header (Full Window Width) */}
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm no-print`}>
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full flex flex-wrap items-center justify-between gap-3">
 
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2 rounded-xl text-white shadow-md">
@@ -1161,26 +1202,68 @@ export default function App() {
         </p>
       </div>
 
-      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 space-y-4 ${expandedDay ? 'no-print' : ''}`}>
+      {/* Main Content Area Expanded to 100% Window Width */}
+      <main className={`flex-1 w-full px-4 py-4 space-y-4 ${expandedDay ? 'no-print' : ''}`}>
 
         {/* Toolbar Bar */}
         <div className={`p-3.5 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 no-print ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
 
-          {/* Search Box */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search activity, venue, or details..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+          {/* Shortened Search Box & Width / Height Scale Sliders */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-44 sm:w-56">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search activity, venue..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Grid Width & Height Scalers (100% to 500%) */}
+            <div className="flex items-center space-x-3 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+              <div className="flex items-center space-x-1.5" title="Scale Calendar Width (100% - 500%)">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">W: {gridWidthScale}%</span>
+                <input
+                  type="range"
+                  min="100"
+                  max="500"
+                  step="10"
+                  value={gridWidthScale}
+                  onChange={(e) => setGridWidthScale(Number(e.target.value))}
+                  className="w-16 sm:w-20 accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center space-x-1.5" title="Scale Calendar Height (100% - 500%)">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">H: {gridHeightScale}%</span>
+                <input
+                  type="range"
+                  min="100"
+                  max="500"
+                  step="10"
+                  value={gridHeightScale}
+                  onChange={(e) => setGridHeightScale(Number(e.target.value))}
+                  className="w-16 sm:w-20 accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {(gridWidthScale !== 100 || gridHeightScale !== 100) && (
+                <button
+                  onClick={() => { setGridWidthScale(100); setGridHeightScale(100); }}
+                  className="text-[10px] text-blue-500 hover:underline font-bold pl-1"
+                  title="Reset Grid Dimensions to Default"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Date & Time Range Controls Dropdown Toggle */}
@@ -1399,8 +1482,15 @@ export default function App() {
           </div>
         )}
 
-        <div className={`rounded-xl border shadow-sm overflow-x-auto ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="min-w-[1000px]">
+        {/* Main Grid Viewport with Dynamic Width & Height Scaling */}
+        <div className={`rounded-xl border shadow-sm overflow-x-auto overflow-y-auto ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div
+            style={{
+              width: `${gridWidthScale}%`,
+              minWidth: `${(gridWidthScale / 100) * 1000}px`
+            }}
+            className="transition-all duration-150"
+          >
 
             {/* Dynamic Date Header Row */}
             <div
@@ -1436,10 +1526,14 @@ export default function App() {
               })}
             </div>
 
-            {/* Time Grid Layout Body */}
+            {/* Main Time Grid Layout Body (Dynamic Scaled Height) */}
             <div
-              style={{ display: 'grid', gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))` }}
-              className="relative h-[720px] select-none"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))`,
+                height: `${Math.round(500 * (gridHeightScale / 100))}px`
+              }}
+              className="relative select-none transition-all duration-150"
             >
 
               {/* Left Dynamic Time Markers Column */}
