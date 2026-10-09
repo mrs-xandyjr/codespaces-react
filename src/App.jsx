@@ -26,12 +26,14 @@ const FIREBASE_DOC_PATH = "ymsat2027";
 
 // Schedule dates from January 20 to January 27, 2027 (8 Days)
 const EVENT_DATES = [
-   { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
+  { id: '2027-01-20', label: 'Jan 20, 2027', dayName: 'Wednesday' },
+  { id: '2027-01-21', label: 'Jan 21, 2027', dayName: 'Thursday' },
   { id: '2027-01-22', label: 'Jan 22, 2027', dayName: 'Friday' },
   { id: '2027-01-23', label: 'Jan 23, 2027', dayName: 'Saturday' },
   { id: '2027-01-24', label: 'Jan 24, 2027', dayName: 'Sunday' },
   { id: '2027-01-25', label: 'Jan 25, 2027', dayName: 'Monday' },
   { id: '2027-01-26', label: 'Jan 26, 2027', dayName: 'Tuesday' },
+  { id: '2027-01-27', label: 'Jan 27, 2027', dayName: 'Wednesday' },
 ];
 
 // Priority Order for Left-to-Right Overlapping Layout Snap
@@ -268,9 +270,9 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const [tags, setTags] = useState(DEFAULT_TAGS);
 
-  // Dynamic Date and Time Display Range States
-  const [startDateFilter, setStartDateFilter] = useState('2027-01-20');
-  const [endDateFilter, setEndDateFilter] = useState('2027-01-27');
+  // Dynamic Date and Time Display Range States (Default range set to Jan 21, 2027 - Jan 26, 2027)
+  const [startDateFilter, setStartDateFilter] = useState('2027-01-21');
+  const [endDateFilter, setEndDateFilter] = useState('2027-01-26');
   const [gridStartTime, setGridStartTime] = useState('06:00'); // 6:00 AM
   const [gridEndTime, setGridEndTime] = useState('18:00');   // 6:00 PM
   const [isRangeSettingsOpen, setIsRangeSettingsOpen] = useState(false);
@@ -328,7 +330,7 @@ export default function App() {
   // Modals & Dialogs
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
-  const [expandedDay, setExpandedDay] = useState(null); // '2027-01-20' or null
+  const [expandedDay, setExpandedDay] = useState(null); // '2027-01-21' or null
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [shareToast, setShareToast] = useState(false);
@@ -341,7 +343,7 @@ export default function App() {
 
   // Form State for Activity Add/Edit
   const [formTitle, setFormTitle] = useState('');
-  const [formDate, setFormDate] = useState('2027-01-20');
+  const [formDate, setFormDate] = useState('2027-01-21');
   const [formStartTime, setFormStartTime] = useState('08:00');
   const [formEndTime, setFormEndTime] = useState('09:00');
   const [formVenue, setFormVenue] = useState('');
@@ -664,7 +666,7 @@ export default function App() {
     });
   };
 
-  const openAddActivityModal = (defaultDate = '2027-01-20', defaultStart = '08:00') => {
+  const openAddActivityModal = (defaultDate = '2027-01-21', defaultStart = '08:00') => {
     setEditingActivity(null);
     setFormTitle('');
     setFormDate(defaultDate);
@@ -857,7 +859,7 @@ export default function App() {
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
 
-      {/* Global CSS for Clean Printing */}
+      {/* Global CSS for Clean Unclipped Landscape Printing */}
       <style>{`
         @media print {
           body {
@@ -865,6 +867,7 @@ export default function App() {
             color: #000000 !important;
             padding: 0 !important;
             margin: 0 !important;
+            overflow: visible !important;
           }
           header, footer, .no-print, button, input, select {
             display: none !important;
@@ -872,9 +875,22 @@ export default function App() {
           .print-header-banner {
             display: block !important;
           }
+          .overflow-x-auto, .overflow-y-auto, .overflow-hidden {
+            overflow: visible !important;
+          }
+          .min-w-\\[1000px\\] {
+            min-width: 100% !important;
+            width: 100% !important;
+          }
+          .relative.h-\\[720px\\] {
+            height: 820px !important;
+          }
+          .relative.h-\\[1000px\\] {
+            height: 880px !important;
+          }
           .print-modal-container {
-            position: absolute !important;
-            inset: 0 !important;
+            position: relative !important;
+            inset: auto !important;
             width: 100% !important;
             height: auto !important;
             background: white !important;
@@ -888,8 +904,8 @@ export default function App() {
             print-color-adjust: exact !important;
           }
           @page {
-            size: auto;
-            margin: 12mm;
+            size: landscape;
+            margin: 8mm;
           }
         }
       `}</style>
