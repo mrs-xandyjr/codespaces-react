@@ -5,7 +5,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink
 } from 'lucide-react';
 
 // Firebase credentials for Method 3 Cloud Synchronization
@@ -158,7 +158,6 @@ function detectConflicts(activities) {
 function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLanes = false) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
-  // Identify all distinct non-grade tags present across activities on this date
   const nonGradeTagsSet = new Set();
   dayActivities.forEach(act => {
     if (act.tags && act.tags.length > 0) {
@@ -171,17 +170,14 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLane
     }
   });
 
-  // Sort non-grade tags according to the custom tag order
   const nonGradeTagsList = Array.from(nonGradeTagsSet).sort((a, b) => {
     const idxA = allTags.findIndex(t => t.name.toLowerCase() === a.toLowerCase());
     const idxB = allTags.findIndex(t => t.name.toLowerCase() === b.toLowerCase());
     return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
   });
 
-  // Grid tracks: [Grade 7, Grade 8, Grade 9, Grade 10, Grade 11, Grade 12, ...Extra Non-Grade Tags]
   const allDayTracks = [...FIXED_GRADE_TAGS, ...nonGradeTagsList];
 
-  // Set of tags actively used in activities ON THIS SPECIFIC DAY
   const activeTagsOnDay = new Set();
   dayActivities.forEach(act => {
     if (act.tags) {
@@ -189,11 +185,9 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLane
     }
   });
 
-  // Calculate track weight allocation
   const trackWeights = allDayTracks.map(trackTag => {
     const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === trackTag.toLowerCase());
     if (isAutoFitLanes && isGrade) {
-      // Minimize grade lane to 0 weight if it has NO activities on this day
       const hasActivityOnDay = activeTagsOnDay.has(trackTag.toLowerCase());
       return hasActivityOnDay ? 1 : 0;
     }
@@ -202,7 +196,6 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLane
 
   let totalWeight = trackWeights.reduce((sum, w) => sum + w, 0);
 
-  // Fallback if no grade tracks are active on this day
   if (totalWeight === 0) {
     for (let i = 0; i < trackWeights.length; i++) trackWeights[i] = 1;
     totalWeight = trackWeights.length;
@@ -266,7 +259,7 @@ function getMultiTagBackground(actTags, allTags) {
   if (tagColors.length === 1) return tagColors[0];
 
   const step = 100 / tagColors.length;
-  const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1)}%`).join(', ');
+  const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1) * step}%`).join(', ');
   return `linear-gradient(135deg, ${stops})`;
 }
 
@@ -277,7 +270,7 @@ export default function App() {
 
   // Layout Minimization States
   const [minimizedDayIds, setMinimizedDayIds] = useState([]);
-  const [autoFitLaneDayIds, setAutoFitLaneDayIds] = useState([]); // Per-day empty lane minimization set
+  const [autoFitLaneDayIds, setAutoFitLaneDayIds] = useState([]);
 
   // Dynamic Date and Time Display Range States
   const [startDateFilter, setStartDateFilter] = useState('2027-01-21');
@@ -290,7 +283,7 @@ export default function App() {
   const [gridWidthScale, setGridWidthScale] = useState(100);
   const [gridHeightScale, setGridHeightScale] = useState(100);
 
-  // Hover 1-Second Activity Details Popover State with Hover Delay Timers
+  // Hover 1-Second Activity Details Popover State
   const [hoverPopover, setHoverPopover] = useState(null);
   const hoverTimerRef = useRef(null);
   const popoverLeaveTimerRef = useRef(null);
@@ -350,6 +343,8 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [readOnlyBanner, setReadOnlyBanner] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(''); // 'link' or 'embed' or ''
 
   // UI Navigation & View States
   const [darkMode, setDarkMode] = useState(false);
@@ -366,7 +361,6 @@ export default function App() {
   const [expandedDay, setExpandedDay] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [shareToast, setShareToast] = useState(false);
 
   // Tag Management State
   const [isTagModalOpen, setIsTagModalOpen] = useState(false);
@@ -390,6 +384,15 @@ export default function App() {
   // Dragging and Resizing state tracking
   const [draggingAct, setDraggingAct] = useState(null);
 
+  // Generated Live Share Link and Embed Code
+  const liveShareUrl = useMemo(() => {
+    return `${window.location.origin}${window.location.pathname}#mode=view`;
+  }, []);
+
+  const iframeEmbedCode = useMemo(() => {
+    return `<iframe src="${liveShareUrl}" width="100%" height="800px" frameborder="0" style="border:0;" allowfullscreen></iframe>`;
+  }, [liveShareUrl]);
+
   // Effect for Closing Filter Menu on Outside Click
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -401,7 +404,7 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Toggle Entire Day Column Minimization Width (48px)
+  // Toggle Day Minimization
   const toggleMinimizeDay = (dayId) => {
     setMinimizedDayIds(prev =>
       prev.includes(dayId) ? prev.filter(id => id !== dayId) : [...prev, dayId]
@@ -415,33 +418,22 @@ export default function App() {
     );
   };
 
-  // Reset all Day Widths and Grade Lane Minimizations
+  // Reset all minimizations
   const handleResetWidths = () => {
     setMinimizedDayIds([]);
     setAutoFitLaneDayIds([]);
   };
 
-  // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing
+  // Effect 1: Detect Hash Mode for View-Only Execution
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
       if (hash.includes('mode=view') || hash.includes('mode=readonly')) {
         setIsReadOnly(true);
         setReadOnlyBanner(true);
-        const match = hash.match(/data=([^&]+)/);
-        if (match && match[1]) {
-          try {
-            const decoded = JSON.parse(decodeURIComponent(atob(match[1])));
-            if (Array.isArray(decoded.activities)) {
-              setActivities(decoded.activities);
-            }
-            if (Array.isArray(decoded.tags)) {
-              setTags(decoded.tags);
-            }
-          } catch (err) {
-            console.error("Failed to parse shared snapshot link:", err);
-          }
-        }
+      } else {
+        setIsReadOnly(false);
+        setReadOnlyBanner(false);
       }
     };
     handleHash();
@@ -449,10 +441,8 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Effect 2: Real-time Firestore Synchronization
+  // Effect 2: Real-time Firestore Synchronization for BOTH Admin and Read-Only Views
   useEffect(() => {
-    if (isReadOnly) return;
-
     const docRef = doc(db, "schedules", FIREBASE_DOC_PATH);
 
     const unsubscribe = onSnapshot(
@@ -467,7 +457,7 @@ export default function App() {
             setTags(data.tags);
           }
           setSyncStatus('synced');
-        } else {
+        } else if (!isReadOnly) {
           const initialData = {
             activities: DEFAULT_INITIAL_ACTIVITIES,
             tags: DEFAULT_TAGS,
@@ -509,7 +499,7 @@ export default function App() {
     }
   }, [activities, tags]);
 
-  // Mouse Enter & Leave Handlers for Interactive Hover Popover
+  // Hover Popover Timers
   const handleActivityMouseEnter = (e, act) => {
     if (draggingAct) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -557,7 +547,7 @@ export default function App() {
     setHoverPopover(null);
   };
 
-  // Save changes to cloud / local state
+  // Push updates to Firestore
   const saveToCloud = async (newActivities, newTags = tags, recordHistory = true) => {
     if (isReadOnly) return;
 
@@ -894,14 +884,10 @@ export default function App() {
     saveToCloud(activities, tags);
   };
 
-  const handleShareReadOnlyLink = () => {
-    const payload = { activities, tags };
-    const encoded = btoa(JSON.stringify(payload));
-    const shareUrl = `${window.location.origin}${window.location.pathname}#mode=view&data=${encodeURIComponent(encoded)}`;
-
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setShareToast(true);
-      setTimeout(() => setShareToast(false), 3000);
+  const handleCopyTextToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyFeedback(type);
+      setTimeout(() => setCopyFeedback(''), 2500);
     });
   };
 
@@ -1134,19 +1120,19 @@ export default function App() {
         <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2.5 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center space-x-2">
             <Eye className="w-5 h-5 animate-pulse" />
-            <span>👁️ <strong>Read-Only Shared View</strong> — You are viewing a read-only snapshot. Editing is currently locked.</span>
+            <span>👁️ <strong>Read-Only Live View Mode</strong> — You are viewing a live read-only schedule. All updates made by the admin sync here automatically.</span>
           </div>
           <button
             onClick={handleMakeEditableCopy}
             className="bg-slate-900 text-amber-400 hover:bg-slate-800 px-3 py-1 rounded-md text-xs font-bold transition flex items-center space-x-1"
           >
             <Zap className="w-3.5 h-3.5" />
-            <span>Make Editable Copy & Live Sync</span>
+            <span>Switch to Admin / Editable Mode</span>
           </button>
         </div>
       )}
 
-      {/* Header */}
+      {/* Navigation Header */}
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm no-print`}>
         <div className="w-full flex flex-wrap items-center justify-between gap-3">
 
@@ -1235,21 +1221,23 @@ export default function App() {
             </button>
 
             <button
-              onClick={handleShareReadOnlyLink}
+              onClick={() => setIsShareModalOpen(true)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition flex items-center space-x-1.5 ${darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'}`}
-              title="Copy Read-Only Share Link"
+              title="Generate Live Read-Only Share URL or Embed Snippet"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className="w-4 h-4 text-indigo-500" />
               <span>Share Link</span>
             </button>
 
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={`p-2 rounded-lg border transition ${darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}
-              title="Settings & JSON Backup"
-            >
-              <Layers className="w-4 h-4" />
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className={`p-2 rounded-lg border transition ${darkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}
+                title="Settings & JSON Backup"
+              >
+                <Layers className="w-4 h-4" />
+              </button>
+            )}
 
             <button
               onClick={() => setDarkMode(!darkMode)}
@@ -1262,15 +1250,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Share Toast */}
-      {shareToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2 border border-slate-700 animate-bounce no-print">
-          <Check className="w-5 h-5 text-emerald-400" />
-          <span className="text-sm font-medium">Read-Only Link copied to clipboard!</span>
-        </div>
-      )}
-
-      {/* Print Banner */}
+      {/* Print Header */}
       <div className="hidden print-header-banner p-4 border-b-2 border-slate-900 mb-4 text-slate-900">
         <h1 className="text-2xl font-bold tracking-tight">YMSAT 2027 Schedule Planner</h1>
         <p className="text-sm font-semibold text-slate-700 mt-0.5">
@@ -1301,7 +1281,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Scale Sliders */}
+            {/* Grid Scale Sliders */}
             <div className="flex items-center space-x-3 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
               <div className="flex items-center space-x-1.5" title="Scale Calendar Width (100% - 500%)">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">W: {gridWidthScale}%</span>
@@ -1340,7 +1320,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Per-Day Lane Minimization & Layout Reset Controls */}
+            {/* Layout Controls */}
             <div className="flex items-center space-x-1.5 border-l pl-2 border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => {
@@ -1620,7 +1600,7 @@ export default function App() {
             className="transition-all duration-150"
           >
 
-            {/* Dynamic Date Header Row with Per-Day Fit Lanes Toggle */}
+            {/* Dynamic Date Header Row */}
             <div
               style={{ display: 'grid', gridTemplateColumns: gridColumnsTemplate }}
               className={`border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
@@ -1664,7 +1644,6 @@ export default function App() {
                         {dayActCount} {dayActCount === 1 ? 'act' : 'acts'}
                       </span>
                       <div className="flex items-center space-x-1">
-                        {/* Per-Day Empty Grade Lanes Collapse Toggle */}
                         <button
                           onClick={() => toggleAutoFitDayLanes(d.id)}
                           className={`px-1 py-0.5 rounded transition flex items-center space-x-0.5 text-[9px] font-semibold ${
@@ -2486,7 +2465,96 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 4: Settings & JSON Backup Import/Export Modal */}
+      {/* MODAL 4: Share & Embed Live Link Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+          <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
+              <h2 className="text-lg font-bold flex items-center space-x-2">
+                <Share2 className="w-5 h-5 text-indigo-500" />
+                <span>Share & Embed Live Schedule</span>
+              </h2>
+              <button onClick={() => setIsShareModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 mt-4">
+              {/* Real-time Indicator Banner */}
+              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 flex items-start space-x-3 text-xs text-indigo-700 dark:text-indigo-300">
+                <Zap className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div className="space-y-0.5">
+                  <span className="font-bold block">Live Real-Time Cloud Synchronization</span>
+                  <p className="text-[11px] leading-relaxed opacity-90">
+                    Anyone using this link or viewing the embedded schedule will automatically see updates in real time whenever you make changes. No account login required.
+                  </p>
+                </div>
+              </div>
+
+              {/* Option 1: Direct Read-Only URL */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center space-x-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+                  <span>1. Direct Web Share Link (Read-Only)</span>
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={liveShareUrl}
+                    className={`flex-1 px-3 py-2 text-xs font-mono rounded-lg border focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-800'}`}
+                  />
+                  <button
+                    onClick={() => handleCopyTextToClipboard(liveShareUrl, 'link')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5 flex-shrink-0"
+                  >
+                    {copyFeedback === 'link' ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                    <span>{copyFeedback === 'link' ? 'Copied!' : 'Copy Link'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Embed Code Snippet */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center space-x-1.5">
+                  <Code className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>2. Embed Code Snippet (&lt;iframe&gt;)</span>
+                </label>
+                <textarea
+                  rows="3"
+                  readOnly
+                  value={iframeEmbedCode}
+                  className={`w-full p-2.5 text-xs font-mono rounded-lg border focus:outline-none resize-none ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-800'}`}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[10px] text-slate-400">
+                    Copy and paste into Notion, WordPress, Webflow, or custom websites.
+                  </span>
+                  <button
+                    onClick={() => handleCopyTextToClipboard(iframeEmbedCode, 'embed')}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5"
+                  >
+                    {copyFeedback === 'embed' ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copyFeedback === 'embed' ? 'Copied Code!' : 'Copy Embed Code'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end mt-6 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-1.5 rounded-lg text-xs font-bold shadow transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Settings & JSON Backup Import/Export Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -2574,7 +2642,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 5: Custom Confirmation Dialog */}
+      {/* MODAL 6: Custom Confirmation Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
