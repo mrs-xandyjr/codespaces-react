@@ -385,7 +385,7 @@ export default function App() {
 
   // Generated Live Share Link and Embed Code
   const liveShareUrl = useMemo(() => {
-    return `${window.location.origin}${window.location.pathname}#mode=view`;
+    return 'https://ymsat2027-sched.vercel.app/#mode=view';
   }, []);
 
   const iframeEmbedCode = useMemo(() => {
@@ -1642,7 +1642,7 @@ export default function App() {
                       <div className="flex items-center space-x-1">
                         <button
                           onClick={() => toggleAutoFitDayLanes(d.id)}
-                          className={`px-1 py-0.5 rounded transition flex items-center space-x-0.5 text-[9px] font-semibold ${
+                          className={`px-1 py-0.5 rounded transition flex items-center space-0.5 text-[9px] font-semibold ${
                             isFitLanes
                               ? 'bg-indigo-600 text-white font-bold'
                               : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-800'
