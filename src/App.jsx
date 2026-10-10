@@ -5,7 +5,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink, BookOpen
 } from 'lucide-react';
 
 // Firebase credentials for Cloud Synchronization
@@ -342,6 +342,7 @@ export default function App() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [readOnlyBanner, setReadOnlyBanner] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState('');
 
   // UI Navigation & View States
@@ -422,16 +423,18 @@ export default function App() {
     setAutoFitLaneDayIds([]);
   };
 
-  // Effect 1: Detect Hash Mode for View-Only Execution
+  // Effect 1: Detect Hash Mode for View-Only Execution & Trigger Quick Start Modal
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
       if (hash.includes('mode=view') || hash.includes('mode=readonly')) {
         setIsReadOnly(true);
         setReadOnlyBanner(true);
+        setIsQuickStartOpen(true); // Open Quick Start Guide automatically in read-only mode
       } else {
         setIsReadOnly(false);
         setReadOnlyBanner(false);
+        setIsQuickStartOpen(false);
       }
     };
     handleHash();
@@ -1106,13 +1109,22 @@ export default function App() {
         </div>
       )}
 
-      {/* Read-Only Mode Amber Alert Banner without Admin Switch Option */}
+      {/* Read-Only Mode Amber Alert Banner with Quick Start Guide Button */}
       {readOnlyBanner && (
-        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2 flex items-center justify-between shadow-md no-print text-xs sm:text-sm">
+        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2 flex flex-wrap items-center justify-between gap-2 shadow-md no-print text-xs sm:text-sm">
           <div className="flex items-center space-x-2">
             <Eye className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse flex-shrink-0" />
             <span>👁️ <strong>Read-Only Live View Mode</strong> — You are viewing a live schedule. All updates made by the admin sync here automatically in real time.</span>
           </div>
+
+          <button
+            onClick={() => setIsQuickStartOpen(true)}
+            className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-sm ml-auto"
+            title="Open Quick Start Guide"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Quick Start Guide</span>
+          </button>
         </div>
       )}
 
@@ -2538,7 +2550,104 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 5: Settings & JSON Backup Import/Export Modal */}
+      {/* MODAL 5: Quick Start Guide Modal (View-Only Link) */}
+      {isQuickStartOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+          <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
+              <h2 className="text-lg font-bold flex items-center space-x-2">
+                <BookOpen className="w-5 h-5 text-blue-500" />
+                <span>Quick Start Guide: YMSAT 2027 Read-Only Schedule</span>
+              </h2>
+              <button onClick={() => setIsQuickStartOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 mt-4 text-xs sm:text-sm">
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                Welcome! This live schedule keeps you up to date in real time. Whenever the event organizers make a change, your screen updates automatically—no page refreshes or logins required!
+              </p>
+
+              {/* 1. Quick Navigation & Controls */}
+              <div>
+                <h3 className="font-bold text-sm text-blue-600 dark:text-blue-400 mb-2">1. Quick Navigation & Controls</h3>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'bg-slate-950/80 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
+                        <th className="p-2.5 font-bold">Feature</th>
+                        <th className="p-2.5 font-bold">How to Use It</th>
+                        <th className="p-2.5 font-bold">What It Does</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-medium">
+                      <tr>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Search Bar</td>
+                        <td className="p-2.5">Type in the search box at the top.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Instantly finds events by title, venue, or keyword.</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Filter Tags</td>
+                        <td className="p-2.5">Click <strong>Filter Tags</strong> → Check your grade or group.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Shows only the events for your grade (e.g., <em>Grade 7</em>, <em>Grade 12</em>, or <em>Guests</em>).</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Grid Sliders</td>
+                        <td className="p-2.5">Move the <strong>W</strong> (Width) or <strong>H</strong> (Height) sliders.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Zooms in or stretches the calendar for easier viewing on mobile or laptops.</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Single Day View</td>
+                        <td className="p-2.5">Click <strong>Full</strong> on any day header.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Opens a full-screen, detailed view of that day's complete timeline.</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Theme Toggle</td>
+                        <td className="p-2.5">Click the <strong>Sun / Moon</strong> icon.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Switches between Light and Dark display modes.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 2. Reading Activity Cards */}
+              <div>
+                <h3 className="font-bold text-sm text-blue-600 dark:text-blue-400 mb-2">2. Reading Activity Cards</h3>
+                <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-300">
+                  <li>
+                    <strong>1-Second Details Popover:</strong> Hold your mouse over any event card for <strong>1 second</strong> to pop open a detailed window showing the full description, venue location, and exact start and end times.
+                  </li>
+                </ul>
+              </div>
+
+              {/* 3. Printing Your Schedule */}
+              <div>
+                <h3 className="font-bold text-sm text-blue-600 dark:text-blue-400 mb-2">3. Printing Your Schedule</h3>
+                <p className="font-semibold text-xs text-slate-500 dark:text-slate-400 mb-1">Need a hard copy or a PDF save for your phone?</p>
+                <ol className="list-decimal pl-5 space-y-1 text-slate-600 dark:text-slate-300">
+                  <li>Click <strong>Print Schedule</strong> in the top navigation bar.</li>
+                  <li>Your browser will automatically format a clean, landscape print view with all web buttons and clutter hidden.</li>
+                  <li>Choose <strong>Save as PDF</strong> or send directly to your local printer.</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end mt-6 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsQuickStartOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition"
+              >
+                Got It!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Settings & JSON Backup Import/Export Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -2626,7 +2735,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 6: Custom Confirmation Dialog */}
+      {/* MODAL 7: Custom Confirmation Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
