@@ -3,9 +3,9 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
-  Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2,
+  Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical
 } from 'lucide-react';
 
 // Firebase credentials for Method 3 Cloud Synchronization
@@ -161,9 +161,9 @@ function detectConflicts(activities) {
 
 /**
  * Computes track-aligned horizontal positions (left and width) for activities.
- * Fixed 6 Lanes for Grade 7 to 12 + dynamic lanes added on the far right for non-grade tags.
+ * Supports collapsing empty/minimized grade tracks.
  */
-function computeOverlappingDayLayouts(dayActivities) {
+function computeOverlappingDayLayouts(dayActivities, allTags = [], minimizedGradeTags = []) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
   // Identify all distinct non-grade tags present across activities on this date
@@ -179,10 +179,38 @@ function computeOverlappingDayLayouts(dayActivities) {
     }
   });
 
-  const nonGradeTagsList = Array.from(nonGradeTagsSet);
+  // Sort non-grade tags according to the custom tag order
+  const nonGradeTagsList = Array.from(nonGradeTagsSet).sort((a, b) => {
+    const idxA = allTags.findIndex(t => t.name.toLowerCase() === a.toLowerCase());
+    const idxB = allTags.findIndex(t => t.name.toLowerCase() === b.toLowerCase());
+    return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+  });
+
   // Grid tracks: [Grade 7, Grade 8, Grade 9, Grade 10, Grade 11, Grade 12, ...Extra Non-Grade Tags]
   const allDayTracks = [...FIXED_GRADE_TAGS, ...nonGradeTagsList];
-  const totalTracks = allDayTracks.length; // Always >= 6
+
+  // Evaluate relative weight (0 for minimized empty grade tracks, 1 for active)
+  const trackWeights = allDayTracks.map(t => {
+    const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === t.toLowerCase());
+    if (isGrade && minimizedGradeTags.some(m => m.toLowerCase() === t.toLowerCase())) {
+      return 0;
+    }
+    return 1;
+  });
+
+  const totalWeight = trackWeights.reduce((sum, w) => sum + w, 0);
+  if (totalWeight === 0) return dayActivities.map(act => ({ ...act, left: 0, width: 100 }));
+
+  const trackOffsets = [];
+  const trackWidths = [];
+  let currentOffset = 0;
+
+  for (let i = 0; i < allDayTracks.length; i++) {
+    const wPercent = (trackWeights[i] / totalWeight) * 100;
+    trackOffsets.push(currentOffset);
+    trackWidths.push(wPercent);
+    currentOffset += wPercent;
+  }
 
   return dayActivities.map(act => {
     const matchingIndices = [];
@@ -204,10 +232,12 @@ function computeOverlappingDayLayouts(dayActivities) {
     if (matchingIndices.length > 0) {
       const minIdx = Math.min(...matchingIndices);
       const maxIdx = Math.max(...matchingIndices);
-      const span = maxIdx - minIdx + 1;
 
-      left = (minIdx / totalTracks) * 100;
-      width = (span / totalTracks) * 100;
+      left = trackOffsets[minIdx];
+      width = 0;
+      for (let k = minIdx; k <= maxIdx; k++) {
+        width += trackWidths[k];
+      }
     }
 
     return {
@@ -237,6 +267,10 @@ export default function App() {
   // Core Data States
   const [activities, setActivities] = useState([]);
   const [tags, setTags] = useState(DEFAULT_TAGS);
+
+  // Layout Minimization States
+  const [minimizedDayIds, setMinimizedDayIds] = useState([]);
+  const [minimizeEmptyGradeTracks, setMinimizeEmptyGradeTracks] = useState(false);
 
   // Dynamic Date and Time Display Range States (Default range set to Jan 21, 2027 - Jan 26, 2027)
   const [startDateFilter, setStartDateFilter] = useState('2027-01-21');
@@ -279,6 +313,28 @@ export default function App() {
     return EVENT_DATES.filter(d => d.id >= startDateFilter && d.id <= endDateFilter);
   }, [startDateFilter, endDateFilter]);
 
+  // List of days with 0 scheduled activities
+  const emptyDayIds = useMemo(() => {
+    return displayedDates
+      .filter(d => activities.filter(a => a.date === d.id).length === 0)
+      .map(d => d.id);
+  }, [displayedDates, activities]);
+
+  // List of Grade Tags with 0 scheduled activities across all dates
+  const emptyGradeTags = useMemo(() => {
+    return FIXED_GRADE_TAGS.filter(grade => {
+      return !activities.some(act => act.tags && act.tags.some(t => t.toLowerCase() === grade.toLowerCase()));
+    });
+  }, [activities]);
+
+  // Dynamic Grid Template Columns definition considering minimized day widths
+  const gridColumnsTemplate = useMemo(() => {
+    const colSpecs = displayedDates.map(d =>
+      minimizedDayIds.includes(d.id) ? '48px' : 'minmax(120px, 1fr)'
+    );
+    return `80px ${colSpecs.join(' ')}`;
+  }, [displayedDates, minimizedDayIds]);
+
   // Refs to access current activities/tags inside global event listeners
   const activitiesRef = useRef(activities);
   useEffect(() => {
@@ -318,6 +374,10 @@ export default function App() {
   const [tagNameInput, setTagNameInput] = useState('');
   const [tagColorInput, setTagColorInput] = useState('#93c5fd');
 
+  // Tag Drag-and-Drop Reordering States
+  const [draggedTagIndex, setDraggedTagIndex] = useState(null);
+  const [dragOverTagIndex, setDragOverTagIndex] = useState(null);
+
   // Form State for Activity Add/Edit
   const [formTitle, setFormTitle] = useState('');
   const [formDate, setFormDate] = useState('2027-01-21');
@@ -340,6 +400,19 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Toggle Day Minimization
+  const toggleMinimizeDay = (dayId) => {
+    setMinimizedDayIds(prev =>
+      prev.includes(dayId) ? prev.filter(id => id !== dayId) : [...prev, dayId]
+    );
+  };
+
+  // Reset all minimizations
+  const handleResetWidths = () => {
+    setMinimizedDayIds([]);
+    setMinimizeEmptyGradeTracks(false);
+  };
 
   // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing
   useEffect(() => {
@@ -689,6 +762,36 @@ export default function App() {
         setConfirmDialog(null);
       }
     });
+  };
+
+  // Drag-and-Drop Tag Reordering Handlers
+  const handleTagDragStart = (e, index) => {
+    setDraggedTagIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleTagDragOver = (e, index) => {
+    e.preventDefault();
+    if (dragOverTagIndex !== index) {
+      setDragOverTagIndex(index);
+    }
+  };
+
+  const handleTagDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedTagIndex === null || draggedTagIndex === targetIndex) {
+      setDraggedTagIndex(null);
+      setDragOverTagIndex(null);
+      return;
+    }
+
+    const updatedTags = [...tags];
+    const [movedTag] = updatedTags.splice(draggedTagIndex, 1);
+    updatedTags.splice(targetIndex, 0, movedTag);
+
+    setDraggedTagIndex(null);
+    setDragOverTagIndex(null);
+    saveToCloud(activities, updatedTags);
   };
 
   const openAddActivityModal = (defaultDate = '2027-01-21', defaultStart = '08:00') => {
@@ -1232,6 +1335,57 @@ export default function App() {
                 </button>
               )}
             </div>
+
+            {/* Column Minimization & Layout Reset Controls */}
+            <div className="flex items-center space-x-1.5 border-l pl-2 border-slate-200 dark:border-slate-800">
+              {emptyDayIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    const allEmptyAlreadyMinimized = emptyDayIds.every(id => minimizedDayIds.includes(id));
+                    if (allEmptyAlreadyMinimized) {
+                      setMinimizedDayIds(prev => prev.filter(id => !emptyDayIds.includes(id)));
+                    } else {
+                      setMinimizedDayIds(prev => Array.from(new Set([...prev, ...emptyDayIds])));
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center space-x-1 ${
+                    emptyDayIds.every(id => minimizedDayIds.includes(id))
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : darkMode ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Minimize all days with 0 scheduled activities"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Empty Days ({emptyDayIds.length})</span>
+                </button>
+              )}
+
+              {emptyGradeTags.length > 0 && (
+                <button
+                  onClick={() => setMinimizeEmptyGradeTracks(!minimizeEmptyGradeTracks)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center space-x-1 ${
+                    minimizeEmptyGradeTracks
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : darkMode ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Collapse grade level columns that have no scheduled activities"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Unused Grades ({emptyGradeTags.length})</span>
+                </button>
+              )}
+
+              {(minimizedDayIds.length > 0 || minimizeEmptyGradeTracks) && (
+                <button
+                  onClick={handleResetWidths}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition flex items-center space-x-1"
+                  title="Reset all day columns and grade track widths back to full size"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Widths</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Date & Time Range Controls Dropdown Toggle */}
@@ -1460,9 +1614,9 @@ export default function App() {
             className="transition-all duration-150"
           >
 
-            {/* Dynamic Date Header Row */}
+            {/* Dynamic Date Header Row with Resizable/Minimizable Days */}
             <div
-              style={{ display: 'grid', gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))` }}
+              style={{ display: 'grid', gridTemplateColumns: gridColumnsTemplate }}
               className={`border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
             >
               <div className="p-3 flex items-center justify-center border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-400">
@@ -1470,6 +1624,28 @@ export default function App() {
               </div>
               {displayedDates.map((d) => {
                 const dayActCount = filteredActivities.filter(a => a.date === d.id).length;
+                const isMinimized = minimizedDayIds.includes(d.id);
+
+                if (isMinimized) {
+                  return (
+                    <div key={d.id} className="p-2 border-r border-slate-200 dark:border-slate-800 flex flex-col items-center justify-between bg-slate-200/50 dark:bg-slate-950/80">
+                      <div className="font-bold text-slate-700 dark:text-slate-300 text-[10px] truncate w-full text-center" title={`${d.label} (${d.dayName})`}>
+                        {d.label.split(',')[0]}
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-mono my-1">
+                        ({dayActCount})
+                      </div>
+                      <button
+                        onClick={() => toggleMinimizeDay(d.id)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 p-0.5 rounded hover:bg-indigo-100 dark:hover:bg-slate-800 transition"
+                        title="Restore Day Column Width"
+                      >
+                        <Maximize2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={d.id} className="p-2.5 border-r border-slate-200 dark:border-slate-800 flex flex-col items-center justify-between group">
                     <div>
@@ -1480,14 +1656,24 @@ export default function App() {
                       <span className="text-[10px] bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded-full text-slate-600 dark:text-slate-400 font-mono">
                         {dayActCount} {dayActCount === 1 ? 'act' : 'acts'}
                       </span>
-                      <button
-                        onClick={() => setExpandedDay(d.id)}
-                        className="text-blue-500 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
-                        title="Expand Full-Screen Single Day View"
-                      >
-                        <Maximize2 className="w-2.5 h-2.5" />
-                        <span>Expand</span>
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => toggleMinimizeDay(d.id)}
+                          className="text-slate-400 hover:text-indigo-600 px-1 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
+                          title="Minimize Day Column Width"
+                        >
+                          <Minimize2 className="w-2.5 h-2.5" />
+                          <span>Min</span>
+                        </button>
+                        <button
+                          onClick={() => setExpandedDay(d.id)}
+                          className="text-blue-500 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
+                          title="Expand Full-Screen Single Day View"
+                        >
+                          <Maximize2 className="w-2.5 h-2.5" />
+                          <span>Full</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1498,7 +1684,7 @@ export default function App() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: `80px repeat(${displayedDates.length}, minmax(120px, 1fr))`,
+                gridTemplateColumns: gridColumnsTemplate,
                 height: `${Math.round(500 * (gridHeightScale / 100))}px`
               }}
               className="relative select-none transition-all duration-150"
@@ -1523,14 +1709,17 @@ export default function App() {
               {/* Displayed Event Columns */}
               {displayedDates.map((d) => {
                 const dayActivities = filteredActivities.filter(a => a.date === d.id);
-                const layoutedActivities = computeOverlappingDayLayouts(dayActivities);
+                const activeMinimizedGradeTags = minimizeEmptyGradeTracks ? emptyGradeTags : [];
+                const layoutedActivities = computeOverlappingDayLayouts(dayActivities, tags, activeMinimizedGradeTags);
 
                 return (
                   <div
                     key={d.id}
                     data-day-column="true"
                     data-day-id={d.id}
-                    className="relative border-r border-slate-200 dark:border-slate-800 h-full group/col"
+                    className={`relative border-r border-slate-200 dark:border-slate-800 h-full group/col ${
+                      minimizedDayIds.includes(d.id) ? 'bg-slate-100/50 dark:bg-slate-950/40' : ''
+                    }`}
                   >
                     {/* Hourly Horizontal Grid Lines */}
                     {hourTicks.map((mins) => {
@@ -1641,9 +1830,9 @@ export default function App() {
                               )}
                             </div>
 
-                            <div className="text-[10px] opacity-90 flex items-center space-x-1 mt-0.5 font-mono">
+                            <div className="text-[10px] opacity-90 flex items-center space-x-1 mt-0.5 font-mono truncate">
                               <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-                              <span>{format12H(act.startTime)} - {format12H(act.endTime)}</span>
+                              <span className="truncate">{format12H(act.startTime)} - {format12H(act.endTime)}</span>
                             </div>
 
                             {act.venue && (
@@ -1897,7 +2086,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 2: Manage Tags Add / Edit Modal */}
+      {/* MODAL 2: Manage Tags Add / Edit / Reorder Modal */}
       {isTagModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
           <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -1969,19 +2158,41 @@ export default function App() {
               </div>
             </form>
 
-            {/* List of Existing Tags */}
+            {/* List of Existing Tags with Drag and Drop Reordering */}
             <div className="mt-4">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Configured Tags ({tags.length})</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Configured Tags ({tags.length})
+                </label>
+                <span className="text-[10px] text-indigo-500 font-semibold flex items-center space-x-1">
+                  <GripVertical className="w-3 h-3" />
+                  <span>Drag handle to reorder</span>
+                </span>
+              </div>
+
               <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                {tags.map(tag => {
+                {tags.map((tag, index) => {
                   const assignedCount = activities.filter(a => a.tags.includes(tag.name)).length;
+                  const isDragging = draggedTagIndex === index;
+                  const isDragOver = dragOverTagIndex === index;
+
                   return (
                     <div
                       key={tag.id}
-                      className={`p-2 rounded-xl border flex items-center justify-between transition ${darkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}
+                      draggable
+                      onDragStart={(e) => handleTagDragStart(e, index)}
+                      onDragOver={(e) => handleTagDragOver(e, index)}
+                      onDrop={(e) => handleTagDrop(e, index)}
+                      onDragEnd={() => { setDraggedTagIndex(null); setDragOverTagIndex(null); }}
+                      className={`p-2 rounded-xl border flex items-center justify-between transition ${
+                        isDragging ? 'opacity-40 border-dashed border-indigo-500' : ''
+                      } ${
+                        isDragOver ? 'border-2 border-indigo-500 bg-indigo-50/20' : darkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                      }`}
                     >
                       <div className="flex items-center space-x-2.5">
-                        <span style={{ backgroundColor: tag.color }} className="w-4 h-4 rounded-full border border-slate-400/40 shadow-sm" />
+                        <GripVertical className="w-4 h-4 text-slate-400 hover:text-indigo-500 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                        <span style={{ backgroundColor: tag.color }} className="w-4 h-4 rounded-full border border-slate-400/40 shadow-sm flex-shrink-0" />
                         <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">{tag.name}</span>
                         <span className="text-[10px] text-slate-400 font-mono">({assignedCount} {assignedCount === 1 ? 'activity' : 'activities'})</span>
                       </div>
@@ -2143,7 +2354,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {computeOverlappingDayLayouts(filteredActivities.filter(a => a.date === expandedDay)).map(act => {
+                  {computeOverlappingDayLayouts(filteredActivities.filter(a => a.date === expandedDay), tags, minimizeEmptyGradeTracks ? emptyGradeTags : []).map(act => {
                     const startMins = timeToMins(act.startTime);
                     const endMins = timeToMins(act.endTime);
 
