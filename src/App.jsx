@@ -36,14 +36,18 @@ const EVENT_DATES = [
   { id: '2027-01-27', label: 'Jan 27, 2027', dayName: 'Wednesday' },
 ];
 
-// Priority Order for Left-to-Right Overlapping Layout Snap
-const TAG_ORDER_PRIORITY = [
+// Fixed Primary Grade Tags for Vertical Alignment (6 Lanes)
+const FIXED_GRADE_TAGS = [
   'Grade 7',
   'Grade 8',
   'Grade 9',
   'Grade 10',
   'Grade 11',
-  'Grade 12',
+  'Grade 12'
+];
+
+const TAG_ORDER_PRIORITY = [
+  ...FIXED_GRADE_TAGS,
   'Guests (Students)',
   'Guests (Teachers)'
 ];
@@ -112,7 +116,7 @@ function getTagPriority(act) {
   if (!act.tags || act.tags.length === 0) return 999;
   const firstTag = act.tags[0];
   const idx = TAG_ORDER_PRIORITY.indexOf(firstTag);
-  return idx !== -1 ? idx : 500; // Fallback position for custom tags
+  return idx !== -1 ? idx : 500;
 }
 
 /**
@@ -156,98 +160,62 @@ function detectConflicts(activities) {
 }
 
 /**
- * Computes side-by-side layout metrics for overlapping concurrent activities on a single date,
- * snapping left-to-right order according to Tag Priority.
+ * Computes track-aligned horizontal positions (left and width) for activities.
+ * Fixed 6 Lanes for Grade 7 to 12 + dynamic lanes added on the far right for non-grade tags.
  */
 function computeOverlappingDayLayouts(dayActivities) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
-  const sorted = [...dayActivities].sort((a, b) => {
-    const aStart = timeToMins(a.startTime);
-    const bStart = timeToMins(b.startTime);
-    if (aStart !== bStart) return aStart - bStart;
-    const aDur = timeToMins(a.endTime) - aStart;
-    const bDur = timeToMins(b.endTime) - bStart;
-    return bDur - aDur;
-  });
-
-  const clusters = [];
-  let currentCluster = [];
-  let maxClusterEnd = -1;
-
-  sorted.forEach(act => {
-    const start = timeToMins(act.startTime);
-    const end = timeToMins(act.endTime);
-
-    if (currentCluster.length === 0 || start < maxClusterEnd) {
-      currentCluster.push(act);
-      if (end > maxClusterEnd) maxClusterEnd = end;
-    } else {
-      clusters.push(currentCluster);
-      currentCluster = [act];
-      maxClusterEnd = end;
+  // Identify all distinct non-grade tags present across activities on this date
+  const nonGradeTagsSet = new Set();
+  dayActivities.forEach(act => {
+    if (act.tags && act.tags.length > 0) {
+      act.tags.forEach(t => {
+        const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === t.trim().toLowerCase());
+        if (!isGrade) {
+          nonGradeTagsSet.add(t.trim());
+        }
+      });
     }
   });
-  if (currentCluster.length > 0) clusters.push(currentCluster);
 
-  const layoutResults = [];
+  const nonGradeTagsList = Array.from(nonGradeTagsSet);
+  // Grid tracks: [Grade 7, Grade 8, Grade 9, Grade 10, Grade 11, Grade 12, ...Extra Non-Grade Tags]
+  const allDayTracks = [...FIXED_GRADE_TAGS, ...nonGradeTagsList];
+  const totalTracks = allDayTracks.length; // Always >= 6
 
-  clusters.forEach(cluster => {
-    const sortedCluster = [...cluster].sort((a, b) => {
-      const aPrio = getTagPriority(a);
-      const bPrio = getTagPriority(b);
-      if (aPrio !== bPrio) return aPrio - bPrio;
+  return dayActivities.map(act => {
+    const matchingIndices = [];
 
-      const aStart = timeToMins(a.startTime);
-      const bStart = timeToMins(b.startTime);
-      if (aStart !== bStart) return aStart - bStart;
-
-      const aDur = timeToMins(a.endTime) - aStart;
-      const bDur = timeToMins(b.endTime) - bStart;
-      return bDur - aDur;
-    });
-
-    const columns = [];
-    const actColumnMap = new Map();
-
-    sortedCluster.forEach(act => {
-      const actStart = timeToMins(act.startTime);
-      const actEnd = timeToMins(act.endTime);
-
-      let assignedCol = -1;
-      for (let c = 0; c < columns.length; c++) {
-        if (columns[c] <= actStart) {
-          assignedCol = c;
-          columns[c] = actEnd;
-          break;
+    if (act.tags && act.tags.length > 0) {
+      act.tags.forEach(t => {
+        const idx = allDayTracks.findIndex(
+          trackTag => trackTag.toLowerCase() === t.trim().toLowerCase()
+        );
+        if (idx !== -1) {
+          matchingIndices.push(idx);
         }
-      }
-
-      if (assignedCol === -1) {
-        assignedCol = columns.length;
-        columns.push(actEnd);
-      }
-
-      actColumnMap.set(act.id, assignedCol);
-    });
-
-    const totalCols = columns.length;
-
-    sortedCluster.forEach(act => {
-      const colIdx = actColumnMap.get(act.id);
-      const width = 100 / totalCols;
-      const left = colIdx * width;
-      layoutResults.push({
-        ...act,
-        colIdx,
-        totalCols,
-        width,
-        left
       });
-    });
-  });
+    }
 
-  return layoutResults;
+    let left = 0;
+    let width = 100;
+
+    if (matchingIndices.length > 0) {
+      const minIdx = Math.min(...matchingIndices);
+      const maxIdx = Math.max(...matchingIndices);
+      const span = maxIdx - minIdx + 1;
+
+      left = (minIdx / totalTracks) * 100;
+      width = (span / totalTracks) * 100;
+    }
+
+    return {
+      ...act,
+      left,
+      width
+    };
+  });
 }
 
 // Compute multi-tag linear gradient style for activity cards
