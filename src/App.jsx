@@ -5,7 +5,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns
 } from 'lucide-react';
 
 // Firebase credentials for Method 3 Cloud Synchronization
@@ -111,14 +111,6 @@ function snapTo5Mins(mins) {
   return Math.round(mins / 5) * 5;
 }
 
-// Helper to evaluate activity priority index based on 1st tag
-function getTagPriority(act) {
-  if (!act.tags || act.tags.length === 0) return 999;
-  const firstTag = act.tags[0];
-  const idx = TAG_ORDER_PRIORITY.indexOf(firstTag);
-  return idx !== -1 ? idx : 500;
-}
-
 /**
  * Detects Tag Conflicts (shared tags on time overlap) and Venue Conflicts (shared venue on time overlap)
  */
@@ -160,10 +152,10 @@ function detectConflicts(activities) {
 }
 
 /**
- * Computes track-aligned horizontal positions (left and width) for activities.
- * Supports collapsing empty/minimized grade tracks.
+ * Computes track-aligned horizontal positions for activities.
+ * Supports per-day automatic collapsing of empty grade lanes (`isAutoFitLanes`).
  */
-function computeOverlappingDayLayouts(dayActivities, allTags = [], minimizedGradeTags = []) {
+function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLanes = false) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
   // Identify all distinct non-grade tags present across activities on this date
@@ -189,17 +181,32 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], minimizedGrad
   // Grid tracks: [Grade 7, Grade 8, Grade 9, Grade 10, Grade 11, Grade 12, ...Extra Non-Grade Tags]
   const allDayTracks = [...FIXED_GRADE_TAGS, ...nonGradeTagsList];
 
-  // Evaluate relative weight (0 for minimized empty grade tracks, 1 for active)
-  const trackWeights = allDayTracks.map(t => {
-    const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === t.toLowerCase());
-    if (isGrade && minimizedGradeTags.some(m => m.toLowerCase() === t.toLowerCase())) {
-      return 0;
+  // Set of tags actively used in activities ON THIS SPECIFIC DAY
+  const activeTagsOnDay = new Set();
+  dayActivities.forEach(act => {
+    if (act.tags) {
+      act.tags.forEach(t => activeTagsOnDay.add(t.trim().toLowerCase()));
+    }
+  });
+
+  // Calculate track weight allocation
+  const trackWeights = allDayTracks.map(trackTag => {
+    const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === trackTag.toLowerCase());
+    if (isAutoFitLanes && isGrade) {
+      // Minimize grade lane to 0 weight if it has NO activities on this day
+      const hasActivityOnDay = activeTagsOnDay.has(trackTag.toLowerCase());
+      return hasActivityOnDay ? 1 : 0;
     }
     return 1;
   });
 
-  const totalWeight = trackWeights.reduce((sum, w) => sum + w, 0);
-  if (totalWeight === 0) return dayActivities.map(act => ({ ...act, left: 0, width: 100 }));
+  let totalWeight = trackWeights.reduce((sum, w) => sum + w, 0);
+
+  // Fallback if no grade tracks are active on this day
+  if (totalWeight === 0) {
+    for (let i = 0; i < trackWeights.length; i++) trackWeights[i] = 1;
+    totalWeight = trackWeights.length;
+  }
 
   const trackOffsets = [];
   const trackWidths = [];
@@ -259,7 +266,7 @@ function getMultiTagBackground(actTags, allTags) {
   if (tagColors.length === 1) return tagColors[0];
 
   const step = 100 / tagColors.length;
-  const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1) * step}%`).join(', ');
+  const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1)}%`).join(', ');
   return `linear-gradient(135deg, ${stops})`;
 }
 
@@ -270,9 +277,9 @@ export default function App() {
 
   // Layout Minimization States
   const [minimizedDayIds, setMinimizedDayIds] = useState([]);
-  const [minimizeEmptyGradeTracks, setMinimizeEmptyGradeTracks] = useState(false);
+  const [autoFitLaneDayIds, setAutoFitLaneDayIds] = useState([]); // Per-day empty lane minimization set
 
-  // Dynamic Date and Time Display Range States (Default range set to Jan 21, 2027 - Jan 26, 2027)
+  // Dynamic Date and Time Display Range States
   const [startDateFilter, setStartDateFilter] = useState('2027-01-21');
   const [endDateFilter, setEndDateFilter] = useState('2027-01-26');
   const [gridStartTime, setGridStartTime] = useState('06:00'); // 6:00 AM
@@ -288,7 +295,7 @@ export default function App() {
   const hoverTimerRef = useRef(null);
   const popoverLeaveTimerRef = useRef(null);
 
-  // Undo / Redo History Stacks (Capped at 10 items)
+  // Undo / Redo History Stacks
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const dragSnapshotRef = useRef(null);
@@ -319,13 +326,6 @@ export default function App() {
       .filter(d => activities.filter(a => a.date === d.id).length === 0)
       .map(d => d.id);
   }, [displayedDates, activities]);
-
-  // List of Grade Tags with 0 scheduled activities across all dates
-  const emptyGradeTags = useMemo(() => {
-    return FIXED_GRADE_TAGS.filter(grade => {
-      return !activities.some(act => act.tags && act.tags.some(t => t.toLowerCase() === grade.toLowerCase()));
-    });
-  }, [activities]);
 
   // Dynamic Grid Template Columns definition considering minimized day widths
   const gridColumnsTemplate = useMemo(() => {
@@ -363,7 +363,7 @@ export default function App() {
   // Modals & Dialogs
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
-  const [expandedDay, setExpandedDay] = useState(null); // '2027-01-21' or null
+  const [expandedDay, setExpandedDay] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [shareToast, setShareToast] = useState(false);
@@ -401,17 +401,24 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Toggle Day Minimization
+  // Toggle Entire Day Column Minimization Width (48px)
   const toggleMinimizeDay = (dayId) => {
     setMinimizedDayIds(prev =>
       prev.includes(dayId) ? prev.filter(id => id !== dayId) : [...prev, dayId]
     );
   };
 
-  // Reset all minimizations
+  // Toggle Per-Day Empty Grade Lanes Minimization
+  const toggleAutoFitDayLanes = (dayId) => {
+    setAutoFitLaneDayIds(prev =>
+      prev.includes(dayId) ? prev.filter(id => id !== dayId) : [...prev, dayId]
+    );
+  };
+
+  // Reset all Day Widths and Grade Lane Minimizations
   const handleResetWidths = () => {
     setMinimizedDayIds([]);
-    setMinimizeEmptyGradeTracks(false);
+    setAutoFitLaneDayIds([]);
   };
 
   // Effect 1: Parse Hash Link for Read-Only Snapshot Sharing
@@ -502,7 +509,7 @@ export default function App() {
     }
   }, [activities, tags]);
 
-  // Mouse Enter & Leave Handlers for Interactive 1-Second Details Hover Popover
+  // Mouse Enter & Leave Handlers for Interactive Hover Popover
   const handleActivityMouseEnter = (e, act) => {
     if (draggingAct) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -526,7 +533,7 @@ export default function App() {
         x,
         y
       });
-    }, 1000); // 1-second hover trigger delay
+    }, 1000);
   };
 
   const handleActivityMouseLeave = () => {
@@ -550,7 +557,7 @@ export default function App() {
     setHoverPopover(null);
   };
 
-  // Push updates to Firestore with Undo/Redo History Stacking
+  // Save changes to cloud / local state
   const saveToCloud = async (newActivities, newTags = tags, recordHistory = true) => {
     if (isReadOnly) return;
 
@@ -617,7 +624,7 @@ export default function App() {
     saveToCloud(nextState.activities, nextState.tags, false);
   };
 
-  // Keyboard Shortcuts Listener (Ctrl+Z / Cmd+Z, Ctrl+Y / Cmd+Y / Cmd+Shift+Z)
+  // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isReadOnly) return;
@@ -641,7 +648,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undoStack, redoStack, isReadOnly]);
 
-  // Effect 4: Global Mouse Event Listener for Drag & Resize with Dynamic Time Bounds
+  // Global Mouse Event Listener for Drag & Resize
   useEffect(() => {
     if (!draggingAct || isReadOnly) return;
 
@@ -910,7 +917,6 @@ export default function App() {
     if (isReadOnly || batchMode) return;
     e.stopPropagation();
 
-    // Store pre-drag snapshot for Undo history
     dragSnapshotRef.current = {
       activities: [...activitiesRef.current],
       tags: [...tagsRef.current]
@@ -970,7 +976,6 @@ export default function App() {
     return Array.from(set);
   }, [activities]);
 
-  // Hourly ticks computation for dynamic timeline
   const hourTicks = useMemo(() => {
     const ticks = [];
     const startHour = Math.floor(currentStartMins / 60);
@@ -991,7 +996,7 @@ export default function App() {
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
 
-      {/* Global CSS for Clean Unclipped Landscape Printing */}
+      {/* Global CSS for Landscape Printing */}
       <style>{`
         @media print {
           body {
@@ -1042,7 +1047,7 @@ export default function App() {
         }
       `}</style>
 
-      {/* Interactive 1-Second Hover Activity Details Floating Popover Card with Edit Button */}
+      {/* Hover Activity Details Popover Card */}
       {hoverPopover && (
         <div
           style={{ top: `${hoverPopover.y}px`, left: `${hoverPopover.x}px` }}
@@ -1141,7 +1146,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main App Navigation Header (Full Window Width) */}
+      {/* Header */}
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'} px-4 py-3 shadow-sm no-print`}>
         <div className="w-full flex flex-wrap items-center justify-between gap-3">
 
@@ -1257,7 +1262,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Share Link Toast Notification */}
+      {/* Share Toast */}
       {shareToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2 border border-slate-700 animate-bounce no-print">
           <Check className="w-5 h-5 text-emerald-400" />
@@ -1265,7 +1270,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Print-Only Header Banner for Multi-Day Schedule */}
+      {/* Print Banner */}
       <div className="hidden print-header-banner p-4 border-b-2 border-slate-900 mb-4 text-slate-900">
         <h1 className="text-2xl font-bold tracking-tight">YMSAT 2027 Schedule Planner</h1>
         <p className="text-sm font-semibold text-slate-700 mt-0.5">
@@ -1273,13 +1278,12 @@ export default function App() {
         </p>
       </div>
 
-      {/* Main Content Area Expanded to 100% Window Width */}
+      {/* Main Content Area */}
       <main className={`flex-1 w-full px-4 py-4 space-y-4 ${expandedDay ? 'no-print' : ''}`}>
 
         {/* Toolbar Bar */}
         <div className={`p-3.5 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 no-print ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
 
-          {/* Shortened Search Box & Width / Height Scale Sliders */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-44 sm:w-56">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1297,7 +1301,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Grid Width & Height Scalers (100% to 500%) */}
+            {/* Scale Sliders */}
             <div className="flex items-center space-x-3 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
               <div className="flex items-center space-x-1.5" title="Scale Calendar Width (100% - 500%)">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">W: {gridWidthScale}%</span>
@@ -1336,8 +1340,28 @@ export default function App() {
               )}
             </div>
 
-            {/* Column Minimization & Layout Reset Controls */}
+            {/* Per-Day Lane Minimization & Layout Reset Controls */}
             <div className="flex items-center space-x-1.5 border-l pl-2 border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  const allDisplayedFit = displayedDates.every(d => autoFitLaneDayIds.includes(d.id));
+                  if (allDisplayedFit) {
+                    setAutoFitLaneDayIds(prev => prev.filter(id => !displayedDates.some(d => d.id === id)));
+                  } else {
+                    setAutoFitLaneDayIds(prev => Array.from(new Set([...prev, ...displayedDates.map(d => d.id)])));
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center space-x-1 ${
+                  displayedDates.every(d => autoFitLaneDayIds.includes(d.id))
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : darkMode ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+                title="Collapse empty grade lanes automatically for all days based on active tags"
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span>Auto-Fit All Lanes</span>
+              </button>
+
               {emptyDayIds.length > 0 && (
                 <button
                   onClick={() => {
@@ -1360,35 +1384,19 @@ export default function App() {
                 </button>
               )}
 
-              {emptyGradeTags.length > 0 && (
-                <button
-                  onClick={() => setMinimizeEmptyGradeTracks(!minimizeEmptyGradeTracks)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center space-x-1 ${
-                    minimizeEmptyGradeTracks
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : darkMode ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                  title="Collapse grade level columns that have no scheduled activities"
-                >
-                  <Minimize2 className="w-3.5 h-3.5" />
-                  <span>Unused Grades ({emptyGradeTags.length})</span>
-                </button>
-              )}
-
-              {(minimizedDayIds.length > 0 || minimizeEmptyGradeTracks) && (
+              {(minimizedDayIds.length > 0 || autoFitLaneDayIds.length > 0) && (
                 <button
                   onClick={handleResetWidths}
                   className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition flex items-center space-x-1"
-                  title="Reset all day columns and grade track widths back to full size"
+                  title="Reset all day column widths and grade lanes back to full size"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Widths</span>
+                  <span>Reset Widths & Lanes</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Date & Time Range Controls Dropdown Toggle */}
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsRangeSettingsOpen(!isRangeSettingsOpen)}
@@ -1424,7 +1432,6 @@ export default function App() {
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
-              {/* Filter Dropdown Popover */}
               {isFilterMenuOpen && (
                 <div className={`absolute right-0 sm:left-0 sm:right-auto mt-2 w-56 rounded-xl border shadow-xl z-40 p-2 space-y-1.5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
                   <div className="flex items-center justify-between px-2 py-1 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -1502,7 +1509,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Batch Mode Toggle */}
           {!isReadOnly && (
             <div className="flex items-center space-x-2 border-l pl-3 border-slate-300 dark:border-slate-700">
               <button
@@ -1529,7 +1535,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Collapsible Custom Date & Time Range Panel */}
+        {/* Display Range Panel */}
         {isRangeSettingsOpen && (
           <div className={`p-4 rounded-xl border shadow-sm transition-all no-print ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100/90 border-slate-300'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end`}>
             <div>
@@ -1589,13 +1595,13 @@ export default function App() {
           </div>
         )}
 
-        {/* Conflict Warning Summary Banner */}
+        {/* Conflict Warning Banner */}
         {conflictSummary.total > 0 && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-rose-700 dark:text-rose-300 gap-2 no-print">
             <div className="flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
               <span>
-                <strong>Scheduling Conflicts Detected:</strong> {conflictSummary.tagConflicts > 0 && `${conflictSummary.tagConflicts} Tag Overlap(s)`} {conflictSummary.venueConflicts > 0 && `${conflictSummary.venueConflicts} Venue Double-Booking(s)`}. Affected items are highlighted below.
+                <strong>Scheduling Conflicts Detected:</strong> {conflictSummary.tagConflicts > 0 && `${conflictSummary.tagConflicts} Tag Overlap(s)`} {conflictSummary.venueConflicts > 0 && `${conflictSummary.venueConflicts} Venue Double-Booking(s)`}.
               </span>
             </div>
             <span className="font-mono text-[10px] bg-rose-200 dark:bg-rose-900/50 px-2 py-0.5 rounded">
@@ -1604,7 +1610,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Grid Viewport with Dynamic Width & Height Scaling */}
+        {/* Main Grid Viewport */}
         <div className={`rounded-xl border shadow-sm overflow-x-auto overflow-y-auto ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div
             style={{
@@ -1614,7 +1620,7 @@ export default function App() {
             className="transition-all duration-150"
           >
 
-            {/* Dynamic Date Header Row with Resizable/Minimizable Days */}
+            {/* Dynamic Date Header Row with Per-Day Fit Lanes Toggle */}
             <div
               style={{ display: 'grid', gridTemplateColumns: gridColumnsTemplate }}
               className={`border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
@@ -1625,6 +1631,7 @@ export default function App() {
               {displayedDates.map((d) => {
                 const dayActCount = filteredActivities.filter(a => a.date === d.id).length;
                 const isMinimized = minimizedDayIds.includes(d.id);
+                const isFitLanes = autoFitLaneDayIds.includes(d.id);
 
                 if (isMinimized) {
                   return (
@@ -1657,6 +1664,20 @@ export default function App() {
                         {dayActCount} {dayActCount === 1 ? 'act' : 'acts'}
                       </span>
                       <div className="flex items-center space-x-1">
+                        {/* Per-Day Empty Grade Lanes Collapse Toggle */}
+                        <button
+                          onClick={() => toggleAutoFitDayLanes(d.id)}
+                          className={`px-1 py-0.5 rounded transition flex items-center space-x-0.5 text-[9px] font-semibold ${
+                            isFitLanes
+                              ? 'bg-indigo-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-800'
+                          }`}
+                          title={isFitLanes ? "Restore all 6 grade lanes for this day" : "Minimize empty grade lanes on this day"}
+                        >
+                          <Columns className="w-2.5 h-2.5" />
+                          <span>{isFitLanes ? 'Fitted' : 'Fit'}</span>
+                        </button>
+
                         <button
                           onClick={() => toggleMinimizeDay(d.id)}
                           className="text-slate-400 hover:text-indigo-600 px-1 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
@@ -1665,6 +1686,7 @@ export default function App() {
                           <Minimize2 className="w-2.5 h-2.5" />
                           <span>Min</span>
                         </button>
+
                         <button
                           onClick={() => setExpandedDay(d.id)}
                           className="text-blue-500 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-slate-800 transition flex items-center space-x-0.5 text-[9px] font-semibold"
@@ -1680,7 +1702,7 @@ export default function App() {
               })}
             </div>
 
-            {/* Main Time Grid Layout Body (Dynamic Scaled Height) */}
+            {/* Time Grid Layout Body */}
             <div
               style={{
                 display: 'grid',
@@ -1690,7 +1712,7 @@ export default function App() {
               className="relative select-none transition-all duration-150"
             >
 
-              {/* Left Dynamic Time Markers Column */}
+              {/* Left Time Column */}
               <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-[11px] text-slate-400">
                 {hourTicks.map((mins) => {
                   const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
@@ -1706,11 +1728,11 @@ export default function App() {
                 })}
               </div>
 
-              {/* Displayed Event Columns */}
+              {/* Event Columns */}
               {displayedDates.map((d) => {
                 const dayActivities = filteredActivities.filter(a => a.date === d.id);
-                const activeMinimizedGradeTags = minimizeEmptyGradeTracks ? emptyGradeTags : [];
-                const layoutedActivities = computeOverlappingDayLayouts(dayActivities, tags, activeMinimizedGradeTags);
+                const isAutoFitLanes = autoFitLaneDayIds.includes(d.id);
+                const layoutedActivities = computeOverlappingDayLayouts(dayActivities, tags, isAutoFitLanes);
 
                 return (
                   <div
@@ -1721,7 +1743,7 @@ export default function App() {
                       minimizedDayIds.includes(d.id) ? 'bg-slate-100/50 dark:bg-slate-950/40' : ''
                     }`}
                   >
-                    {/* Hourly Horizontal Grid Lines */}
+                    {/* Hourly Grid Lines */}
                     {hourTicks.map((mins) => {
                       const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
                       return (
@@ -1746,12 +1768,11 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Render Activity Event Cards */}
+                    {/* Activity Event Cards */}
                     {layoutedActivities.map((act) => {
                       const startMins = timeToMins(act.startTime);
                       const endMins = timeToMins(act.endTime);
 
-                      // Hide cards outside current visible time range
                       if (endMins <= currentStartMins || startMins >= currentEndMins) return null;
 
                       const topPercent = Math.max(0, ((startMins - currentStartMins) / totalGridMins) * 100);
@@ -2100,7 +2121,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Tag Add/Edit Form */}
             <form onSubmit={handleSaveTag} className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 mt-4 space-y-3">
               <div className="flex items-center justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300">
                 <span>{editingTagId ? 'Edit Selected Tag' : 'Create New Tag'}</span>
@@ -2141,7 +2161,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Pastel Swatch Quick Select */}
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Pastel Palette Presets:</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -2158,7 +2177,6 @@ export default function App() {
               </div>
             </form>
 
-            {/* List of Existing Tags with Drag and Drop Reordering */}
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -2234,12 +2252,12 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 3: FULL-WIDTH Full-Screen Single Day View Modal (Draggable & Resizable Enabled) */}
+      {/* MODAL 3: Full-Screen Single Day View Modal */}
       {expandedDay && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 print-modal-container">
           <div className={`w-full h-full max-w-none rounded-2xl border shadow-2xl flex flex-col p-4 sm:p-6 overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
 
-            {/* Print Header Visible ONLY on Print Output */}
+            {/* Print Header */}
             <div className="hidden print:block border-b-2 border-slate-900 pb-3 mb-4 text-slate-900">
               <h1 className="text-2xl font-black uppercase tracking-wide">YMSAT 2027 — Single Day View</h1>
               <div className="text-lg font-bold text-blue-700 mt-1">
@@ -2250,7 +2268,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* On-Screen Modal Header (Hidden on Print) */}
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800 gap-4 no-print">
               <div className="flex items-center space-x-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white">
@@ -2266,8 +2284,21 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Date Switcher & Print Controls */}
+              {/* Day View Actions */}
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => toggleAutoFitDayLanes(expandedDay)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${
+                    autoFitLaneDayIds.includes(expandedDay)
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : darkMode ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Toggle empty grade lane minimization for this day"
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span>{autoFitLaneDayIds.includes(expandedDay) ? 'Lanes Fitted' : 'Fit Empty Lanes'}</span>
+                </button>
+
                 <button
                   onClick={handleTriggerPrint}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
@@ -2328,7 +2359,6 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Day Column Target with Drag Tracking Data Attributes */}
                 <div
                   data-day-column="true"
                   data-day-id={expandedDay}
@@ -2341,7 +2371,6 @@ export default function App() {
                     );
                   })}
 
-                  {/* Quick Add Hover Trigger for Single Day View */}
                   {!isReadOnly && !batchMode && !draggingAct && (
                     <div
                       onClick={() => openAddActivityModal(expandedDay, gridStartTime)}
@@ -2354,7 +2383,11 @@ export default function App() {
                     </div>
                   )}
 
-                  {computeOverlappingDayLayouts(filteredActivities.filter(a => a.date === expandedDay), tags, minimizeEmptyGradeTracks ? emptyGradeTags : []).map(act => {
+                  {computeOverlappingDayLayouts(
+                    filteredActivities.filter(a => a.date === expandedDay),
+                    tags,
+                    autoFitLaneDayIds.includes(expandedDay)
+                  ).map(act => {
                     const startMins = timeToMins(act.startTime);
                     const endMins = timeToMins(act.endTime);
 
@@ -2436,7 +2469,6 @@ export default function App() {
                           ))}
                         </div>
 
-                        {/* Bottom Edge Resize Handle for Single Day View */}
                         {!isReadOnly && !batchMode && (
                           <div
                             onMouseDown={(e) => handleMouseDown(e, act, true)}
