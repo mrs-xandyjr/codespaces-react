@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink
 } from 'lucide-react';
 
-// Firebase credentials for Method 3 Cloud Synchronization
+// Firebase credentials for Cloud Synchronization
 const firebaseConfig = {
   apiKey: "AIzaSyBY6uRgGySpqdtoZqhktEwOBv1XSrUC8oE",
   authDomain: "ymsat2027-sched.firebaseapp.com",
@@ -248,7 +248,7 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLane
   });
 }
 
-// Compute multi-tag linear gradient style for activity cards
+// Smooth pastel multi-tag linear gradient background
 function getMultiTagBackground(actTags, allTags) {
   if (!actTags || actTags.length === 0) return '#e5e7eb';
   const tagColors = actTags.map(tName => {
@@ -258,9 +258,7 @@ function getMultiTagBackground(actTags, allTags) {
 
   if (tagColors.length === 1) return tagColors[0];
 
-  const step = 100 / tagColors.length;
-  const stops = tagColors.map((c, i) => `${c} ${i * step}%, ${c} ${(i + 1) * step}%`).join(', ');
-  return `linear-gradient(135deg, ${stops})`;
+  return `linear-gradient(135deg, ${tagColors.join(', ')})`;
 }
 
 export default function App() {
@@ -344,7 +342,7 @@ export default function App() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [readOnlyBanner, setReadOnlyBanner] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState(''); // 'link' or 'embed' or ''
+  const [copyFeedback, setCopyFeedback] = useState('');
 
   // UI Navigation & View States
   const [darkMode, setDarkMode] = useState(false);
@@ -877,13 +875,6 @@ export default function App() {
     });
   };
 
-  const handleMakeEditableCopy = () => {
-    window.location.hash = '';
-    setIsReadOnly(false);
-    setReadOnlyBanner(false);
-    saveToCloud(activities, tags);
-  };
-
   const handleCopyTextToClipboard = (text, type) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopyFeedback(type);
@@ -1115,20 +1106,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Read-Only Mode Amber Alert Banner */}
+      {/* Read-Only Mode Amber Alert Banner without Admin Switch Option */}
       {readOnlyBanner && (
-        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2.5 flex items-center justify-between shadow-md no-print">
+        <div className="bg-amber-500 text-slate-950 font-semibold px-4 py-2 flex items-center justify-between shadow-md no-print text-xs sm:text-sm">
           <div className="flex items-center space-x-2">
-            <Eye className="w-5 h-5 animate-pulse" />
-            <span>👁️ <strong>Read-Only Live View Mode</strong> — You are viewing a live read-only schedule. All updates made by the admin sync here automatically.</span>
+            <Eye className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse flex-shrink-0" />
+            <span>👁️ <strong>Read-Only Live View Mode</strong> — You are viewing a live schedule. All updates made by the admin sync here automatically in real time.</span>
           </div>
-          <button
-            onClick={handleMakeEditableCopy}
-            className="bg-slate-900 text-amber-400 hover:bg-slate-800 px-3 py-1 rounded-md text-xs font-bold transition flex items-center space-x-1"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Switch to Admin / Editable Mode</span>
-          </button>
         </div>
       )}
 
