@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
@@ -19,9 +20,10 @@ const firebaseConfig = {
   measurementId: "G-3NXNS2DVLS"
 };
 
-// Initialize Firebase App & Firestore single instance
+// Initialize Firebase App, Firestore, and Authentication single instances
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 const FIREBASE_DOC_PATH = "ymsat2027";
 
 // Schedule dates from January 20 to January 27, 2027 (8 Days)
@@ -262,6 +264,12 @@ function getMultiTagBackground(actTags, allTags) {
 }
 
 export default function App() {
+  // Firebase Authentication States
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
   // Core Data States
   const [activities, setActivities] = useState([]);
   const [tags, setTags] = useState(DEFAULT_TAGS);
@@ -339,7 +347,7 @@ export default function App() {
 
   // Sync & Sharing States
   const [syncStatus, setSyncStatus] = useState('connecting');
-  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(true);
   const [readOnlyBanner, setReadOnlyBanner] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
@@ -392,6 +400,40 @@ export default function App() {
     return `<iframe src="${liveShareUrl}" width="100%" height="800px" frameborder="0" style="border:0;" allowfullscreen></iframe>`;
   }, [liveShareUrl]);
 
+  // Firebase Auth Observer Hook
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      const hash = window.location.hash;
+      const isHashViewOnly = hash.includes('mode=view') || hash.includes('mode=readonly');
+
+      if (!user || isHashViewOnly) {
+        setIsReadOnly(true);
+      } else {
+        setIsReadOnly(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Admin Login Handler
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      setIsLoginModalOpen(false);
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (err) {
+      alert("Invalid admin email or password.");
+    }
+  };
+
+  // Admin Logout Handler
+  const handleAdminLogout = () => {
+    signOut(auth);
+  };
+
   // Effect for Closing Filter Menu on Outside Click
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -432,7 +474,11 @@ export default function App() {
         setReadOnlyBanner(true);
         setIsQuickStartOpen(true); // Open Quick Start Guide automatically in read-only mode
       } else {
-        setIsReadOnly(false);
+        if (!currentUser) {
+          setIsReadOnly(true);
+        } else {
+          setIsReadOnly(false);
+        }
         setReadOnlyBanner(false);
         setIsQuickStartOpen(false);
       }
@@ -440,7 +486,7 @@ export default function App() {
     handleHash();
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  }, [currentUser]);
 
   // Effect 2: Real-time Firestore Synchronization for BOTH Admin and Read-Only Views
   useEffect(() => {
@@ -1169,6 +1215,25 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Admin Authentication Toggle Button */}
+            {currentUser ? (
+              <button
+                onClick={handleAdminLogout}
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs"
+                title="Sign Out Admin Account"
+              >
+                Admin Logout
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs"
+                title="Admin Sign In"
+              >
+                Admin Login
+              </button>
+            )}
+
             {!isReadOnly && (
               <>
                 <div className="flex items-center space-x-1 border-r pr-2 border-slate-200 dark:border-slate-800">
@@ -2762,6 +2827,57 @@ export default function App() {
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 8: Admin Login Modal */}
+      {isLoginModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+          <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800 mb-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Admin Login</h3>
+              <button onClick={() => setIsLoginModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAdminLogin} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-600 dark:text-slate-400">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className={`w-full px-3 py-2 text-xs rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-600 dark:text-slate-400">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className={`w-full px-3 py-2 text-xs rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsLoginModalOpen(false)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition"
+                >
+                  Sign In
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
