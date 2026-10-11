@@ -992,8 +992,9 @@ export default function App() {
           .print-header-banner {
             display: block !important;
           }
-          .overflow-x-auto, .overflow-y-auto, .overflow-hidden {
+          .overflow-x-auto, .overflow-y-auto, .overflow-auto, .max-h-\\[75vh\\] {
             overflow: visible !important;
+            max-height: none !important;
           }
           .min-w-\\[1000px\\] {
             min-width: 100% !important;
@@ -1586,8 +1587,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Grid Viewport */}
-        <div className={`rounded-xl border shadow-sm overflow-x-auto overflow-y-auto ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        {/* Main Grid Viewport with Sticky Column & Row Boundaries */}
+        <div className={`rounded-xl border shadow-sm overflow-auto max-h-[75vh] ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div
             style={{
               width: `${gridWidthScale}%`,
@@ -1596,12 +1597,13 @@ export default function App() {
             className="transition-all duration-150"
           >
 
-            {/* Dynamic Date Header Row */}
+            {/* Frozen Top Row (Date Headers) */}
             <div
               style={{ display: 'grid', gridTemplateColumns: gridColumnsTemplate }}
-              className={`border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
+              className={`sticky top-0 z-20 border-b text-center text-xs font-semibold ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-white border-slate-200 text-slate-700'}`}
             >
-              <div className="p-3 flex items-center justify-center border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-400">
+              {/* Frozen Top-Left Corner Cell */}
+              <div className={`p-3 flex items-center justify-center border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-400 sticky left-0 top-0 z-30 ${darkMode ? 'bg-slate-900' : 'bg-white'}`}>
                 Time
               </div>
               {displayedDates.map((d) => {
@@ -1642,7 +1644,7 @@ export default function App() {
                       <div className="flex items-center space-x-1">
                         <button
                           onClick={() => toggleAutoFitDayLanes(d.id)}
-                          className={`px-1 py-0.5 rounded transition flex items-center space-0.5 text-[9px] font-semibold ${
+                          className={`px-1 py-0.5 rounded transition flex items-center space-x-0.5 text-[9px] font-semibold ${
                             isFitLanes
                               ? 'bg-indigo-600 text-white font-bold'
                               : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-800'
@@ -1687,8 +1689,8 @@ export default function App() {
               className="relative select-none transition-all duration-150"
             >
 
-              {/* Left Time Column */}
-              <div className="border-r border-slate-200 dark:border-slate-800 relative font-mono text-[11px] text-slate-400">
+              {/* Frozen 1st Column (Time Column) */}
+              <div className={`border-r border-slate-200 dark:border-slate-800 relative font-mono text-[11px] text-slate-400 sticky left-0 z-10 ${darkMode ? 'bg-slate-900' : 'bg-white'}`}>
                 {hourTicks.map((mins) => {
                   const topPercent = ((mins - currentStartMins) / totalGridMins) * 100;
                   return (
