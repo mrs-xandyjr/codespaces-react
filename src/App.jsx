@@ -483,6 +483,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState([]);
+  const [selectedStemFilters, setSelectedStemFilters] = useState([]);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef(null);
   const [batchMode, setBatchMode] = useState(false);
@@ -1158,6 +1159,7 @@ export default function App() {
     });
   };
 
+  // Filtered Activities incorporating Search, Tag Filters, and STEM Unit Filters
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
       const query = searchQuery.toLowerCase();
@@ -1169,11 +1171,14 @@ export default function App() {
         (act.stemUnits && act.stemUnits.some(u => u.toLowerCase().includes(query)));
 
       const matchesTag = selectedTagFilters.length === 0 ||
-        act.tags.some(t => selectedTagFilters.includes(t));
+        (act.tags && act.tags.some(t => selectedTagFilters.includes(t)));
 
-      return matchesSearch && matchesTag;
+      const matchesStem = selectedStemFilters.length === 0 ||
+        (act.stemUnits && act.stemUnits.some(u => selectedStemFilters.includes(u)));
+
+      return matchesSearch && matchesTag && matchesStem;
     });
-  }, [activities, searchQuery, selectedTagFilters]);
+  }, [activities, searchQuery, selectedTagFilters, selectedStemFilters]);
 
   const conflictMap = useMemo(() => {
     return detectConflicts(activities);
@@ -1211,6 +1216,8 @@ export default function App() {
   const activeExpandedDayObj = useMemo(() => {
     return EVENT_DATES.find(d => d.id === expandedDay);
   }, [expandedDay]);
+
+  const totalActiveFilterCount = selectedTagFilters.length + selectedStemFilters.length;
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
@@ -1673,12 +1680,12 @@ export default function App() {
               <span>Display Range</span>
             </button>
 
-            {/* Tag Filter Menu */}
+            {/* Tag & STEM Unit Filter Menu */}
             <div className="relative" ref={filterMenuRef}>
               <button
                 onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center space-x-1.5 transition ${
-                  selectedTagFilters.length > 0
+                  totalActiveFilterCount > 0
                     ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
                     : darkMode
                     ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -1686,22 +1693,25 @@ export default function App() {
                 }`}
               >
                 <Filter className="w-3.5 h-3.5" />
-                <span>Filter Tags</span>
-                {selectedTagFilters.length > 0 && (
+                <span>Filter</span>
+                {totalActiveFilterCount > 0 && (
                   <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                    {selectedTagFilters.length}
+                    {totalActiveFilterCount}
                   </span>
                 )}
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isFilterMenuOpen && (
-                <div className={`absolute right-0 sm:left-0 sm:right-auto mt-2 w-56 rounded-xl border shadow-xl z-40 p-2 space-y-1.5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-                  <div className="flex items-center justify-between px-2 py-1 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    <span>Select Tags</span>
-                    {selectedTagFilters.length > 0 && (
+                <div className={`absolute right-0 sm:left-0 sm:right-auto mt-2 w-64 rounded-xl border shadow-xl z-40 p-2.5 space-y-2.5 ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+                  <div className="flex items-center justify-between px-1 py-0.5 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>Filter Options</span>
+                    {totalActiveFilterCount > 0 && (
                       <button
-                        onClick={() => setSelectedTagFilters([])}
+                        onClick={() => {
+                          setSelectedTagFilters([]);
+                          setSelectedStemFilters([]);
+                        }}
                         className="text-blue-500 hover:underline capitalize text-[11px] font-medium"
                       >
                         Clear All
@@ -1709,33 +1719,89 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="max-h-48 overflow-y-auto space-y-1 py-1">
-                    {tags.map(tag => {
-                      const isSelected = selectedTagFilters.includes(tag.name);
-                      return (
+                  {/* STEM Unit Filter Section */}
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5 flex items-center justify-between">
+                      <span>STEM Units In-Charge</span>
+                      {selectedStemFilters.length > 0 && (
                         <button
-                          key={tag.id}
-                          onClick={() => {
-                            if (isSelected) {
-                              setSelectedTagFilters(selectedTagFilters.filter(t => t !== tag.name));
-                            } else {
-                              setSelectedTagFilters([...selectedTagFilters, tag.name]);
-                            }
-                          }}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                            isSelected
-                              ? darkMode ? 'bg-slate-800 text-white font-semibold' : 'bg-slate-100 text-slate-900 font-semibold'
-                              : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-300'
-                          }`}
+                          onClick={() => setSelectedStemFilters([])}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-normal lowercase"
                         >
-                          <div className="flex items-center space-x-2 truncate">
-                            <span style={{ backgroundColor: tag.color }} className="w-3 h-3 rounded-full border border-slate-400/40 flex-shrink-0" />
-                            <span className="truncate">{tag.name}</span>
-                          </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 ml-1" />}
+                          clear
                         </button>
-                      );
-                    })}
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {stemUnits.map(unit => {
+                        const isSelected = selectedStemFilters.includes(unit);
+                        return (
+                          <button
+                            key={unit}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedStemFilters(selectedStemFilters.filter(u => u !== unit));
+                              } else {
+                                setSelectedStemFilters([...selectedStemFilters, unit]);
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase border transition ${
+                              isSelected
+                                ? 'bg-slate-900 text-amber-300 border-slate-900 dark:bg-amber-400 dark:text-slate-950 dark:border-amber-400'
+                                : darkMode
+                                ? 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+                                : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-2.5 h-2.5 inline mr-0.5" />}
+                            {unit}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Grade & Custom Tags Filter Section */}
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                      <span>Grade / Event Tags</span>
+                      {selectedTagFilters.length > 0 && (
+                        <button
+                          onClick={() => setSelectedTagFilters([])}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-normal lowercase"
+                        >
+                          clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1 py-1">
+                      {tags.map(tag => {
+                        const isSelected = selectedTagFilters.includes(tag.name);
+                        return (
+                          <button
+                            key={tag.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedTagFilters(selectedTagFilters.filter(t => t !== tag.name));
+                              } else {
+                                setSelectedTagFilters([...selectedTagFilters, tag.name]);
+                              }
+                            }}
+                            className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition ${
+                              isSelected
+                                ? darkMode ? 'bg-slate-800 text-white font-semibold' : 'bg-slate-100 text-slate-900 font-semibold'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2 truncate">
+                              <span style={{ backgroundColor: tag.color }} className="w-3 h-3 rounded-full border border-slate-400/40 flex-shrink-0" />
+                              <span className="truncate">{tag.name}</span>
+                            </div>
+                            {isSelected && <Check className="w-3 h-3 text-blue-500 flex-shrink-0 ml-1" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {!isReadOnly && (
@@ -1746,7 +1812,7 @@ export default function App() {
                           startCreateTag();
                           setIsTagModalOpen(true);
                         }}
-                        className="w-full flex items-center justify-center space-x-1 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition"
+                        className="w-full flex items-center justify-center space-x-1 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition"
                       >
                         <Tag className="w-3 h-3" />
                         <span>Manage Tags & Units</span>
@@ -3059,9 +3125,9 @@ export default function App() {
                         <td className="p-2.5 text-slate-500 dark:text-slate-400">Instantly finds events by title, venue, STEM unit, or keyword.</td>
                       </tr>
                       <tr>
-                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Filter Tags</td>
-                        <td className="p-2.5">Click <strong>Filter Tags</strong> → Check your grade or group.</td>
-                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Shows only the events for your grade (e.g., <em>Grade 7</em>, <em>SYP (Bio)</em>, or <em>Guests</em>).</td>
+                        <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Filter Menu</td>
+                        <td className="p-2.5">Click <strong>Filter</strong> → Check your grade, custom tags, or STEM Units.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Shows only events matching selected grade tags or STEM units in-charge (e.g. <em>Grade 7</em>, <em>SYP (Bio)</em>, <em>CHEM</em>, <em>PHYS</em>).</td>
                       </tr>
                       <tr>
                         <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Grid Sliders</td>
