@@ -6,7 +6,7 @@ import {
   Calendar, Clock, MapPin, Plus, Trash2, Edit3, Share2, Download, Upload,
   Sun, Moon, Search, Filter, CheckSquare, Square, X, AlertTriangle, Maximize2, Minimize2, RotateCcw,
   Eye, Copy, RefreshCw, Tag, Info, Check, ShieldAlert, Zap, Layers, Sparkles, Palette,
-  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink, BookOpen
+  ChevronDown, ChevronLeft, ChevronRight, Sliders, Undo2, Redo2, Printer, GripVertical, Columns, Code, ExternalLink, BookOpen, Users
 } from 'lucide-react';
 
 // Firebase credentials for Cloud Synchronization
@@ -38,7 +38,10 @@ const EVENT_DATES = [
   { id: '2027-01-27', label: 'Jan 27, 2027', dayName: 'Wednesday' },
 ];
 
-// Fixed Primary Grade Tags for Vertical Alignment (6 Lanes)
+// Default STEM Unit Categories Order
+const DEFAULT_STEM_UNITS = ['CHEM', 'BIO', 'PHYS', 'MATH', 'IES', 'TECH', 'RES', 'CS'];
+
+// Fixed Primary Grade Tags
 const FIXED_GRADE_TAGS = [
   'Grade 7',
   'Grade 8',
@@ -48,13 +51,21 @@ const FIXED_GRADE_TAGS = [
   'Grade 12'
 ];
 
+// SYP Specialized Subject Tags
+const SYP_TAGS = [
+  'SYP (Bio)',
+  'SYP (Chem)',
+  'SYP (Phys)'
+];
+
 const TAG_ORDER_PRIORITY = [
   ...FIXED_GRADE_TAGS,
+  ...SYP_TAGS,
   'Guests (Students)',
   'Guests (Teachers)'
 ];
 
-// Preset Pastel Tags including Guest categories
+// Preset Pastel Tags including Grade 7-12, SYP, and Guest categories
 const DEFAULT_TAGS = [
   { id: 'tag-g7', name: 'Grade 7', color: '#a7f3d0' },  // pastel green
   { id: 'tag-g8', name: 'Grade 8', color: '#fef08a' },  // pastel yellow
@@ -62,13 +73,20 @@ const DEFAULT_TAGS = [
   { id: 'tag-g10', name: 'Grade 10', color: '#93c5fd' }, // pastel blue
   { id: 'tag-g11', name: 'Grade 11', color: '#fbcfe8' }, // pastel pink
   { id: 'tag-g12', name: 'Grade 12', color: '#fed7aa' }, // pastel orange
+  { id: 'tag-syp-bio', name: 'SYP (Bio)', color: '#bbf7d0' }, // pastel mint
+  { id: 'tag-syp-chem', name: 'SYP (Chem)', color: '#fde68a' }, // pastel warm yellow
+  { id: 'tag-syp-phys', name: 'SYP (Phys)', color: '#e9d5ff' }, // pastel lavender
   { id: 'tag-gs', name: 'Guests (Students)', color: '#ddd6fe' }, // pastel purple
   { id: 'tag-gt', name: 'Guests (Teachers)', color: '#bae6fd' }, // pastel cyan
 ];
 
+// 30 Total Color Presets
 const PASTEL_PALETTE = [
   '#a7f3d0', '#fef08a', '#fca5a5', '#93c5fd', '#fbcfe8', '#fed7aa',
-  '#c084fc', '#ddd6fe', '#bae6fd', '#a7f3d0', '#fde68a', '#e2e8f0'
+  '#c084fc', '#ddd6fe', '#bae6fd', '#bbf7d0', '#fde68a', '#e2e8f0',
+  '#cbd5e1', '#f472b6', '#fb7185', '#e879f9', '#a855f7', '#818cf8',
+  '#60a5fa', '#38bdf8', '#2dd4bf', '#34d399', '#a3e635', '#facc15',
+  '#fbbf24', '#fb923c', '#f87171', '#94a3b8', '#d9f99d', '#e9d5ff'
 ];
 
 // Initial default Opening Program activity covering all grades
@@ -81,7 +99,9 @@ const DEFAULT_INITIAL_ACTIVITIES = [
     endTime: '08:30',
     venue: 'Gymnasium / Main Stage',
     description: 'YMSAT 2027 Grand Opening Ceremony and Keynote Addresses',
-    tags: ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
+    tags: ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'],
+    stemUnits: [],
+    pax: ''
   }
 ];
 
@@ -154,50 +174,119 @@ function detectConflicts(activities) {
 }
 
 /**
- * Computes track-aligned horizontal positions for activities.
- * Supports per-day automatic collapsing of empty grade lanes (`isAutoFitLanes`).
+ * Advanced SYP Sub-lane & Overlap Bumping Layout Engine:
+ * 1) Multi-SYP Splitting: If an activity has multiple SYP tags (e.g. SYP Bio & SYP Phys),
+ *    it generates 2 separate visual blocks in their respective sub-lanes.
+ * 2) 1/3 Sub-lane Partitioning: Unbumped SYP activities occupy 1/3 each of the combined
+ *    width of Grade 11 & Grade 12 lanes. Priority in lane positioning is based on SYP tag.
+ * 3) Overlap Bumping: If an SYP activity overlaps in time with any regular Grade 11 or
+ *    Grade 12 activity, it gets bumped to a dedicated SYP lane to the right of Grade 12.
  */
 function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLanes = false) {
   if (!dayActivities || dayActivities.length === 0) return [];
 
-  const nonGradeTagsSet = new Set();
+  // Helper for time overlap
+  const doTimeOverlap = (a, b) => {
+    const aStart = timeToMins(a.startTime);
+    const aEnd = timeToMins(a.endTime);
+    const bStart = timeToMins(b.startTime);
+    const bEnd = timeToMins(b.endTime);
+    return aStart < bEnd && bStart < aEnd;
+  };
+
+  // Step 1: Expand activities that have multiple SYP tags into separate visual items
+  const expandedActs = [];
   dayActivities.forEach(act => {
-    if (act.tags && act.tags.length > 0) {
+    const actSypTags = act.tags ? act.tags.filter(t => SYP_TAGS.includes(t)) : [];
+    if (actSypTags.length > 1) {
+      actSypTags.forEach(sypTag => {
+        expandedActs.push({
+          ...act,
+          _sypSplitTag: sypTag,
+          _virtualKey: `${act.id}__split__${sypTag}`
+        });
+      });
+    } else {
+      expandedActs.push({
+        ...act,
+        _virtualKey: act.id
+      });
+    }
+  });
+
+  // Step 2: Identify regular Grade 11 & Grade 12 activities (tagged G11/G12 with NO SYP tags)
+  const regularG11G12Acts = dayActivities.filter(act => {
+    const hasG11G12 = act.tags && act.tags.some(t => t === 'Grade 11' || t === 'Grade 12');
+    const hasSYP = act.tags && act.tags.some(t => SYP_TAGS.includes(t));
+    return hasG11G12 && !hasSYP;
+  });
+
+  // Step 3: Determine which SYP items get bumped to the right of Grade 12
+  const bumpedSypTagsOnDay = new Set();
+  expandedActs.forEach(item => {
+    const itemSypTag = item._sypSplitTag || (item.tags ? item.tags.find(t => SYP_TAGS.includes(t)) : null);
+    if (itemSypTag) {
+      // Bumps if it overlaps in time with ANY regular Grade 11 or Grade 12 activity
+      const isBumped = regularG11G12Acts.some(gAct => doTimeOverlap(item, gAct));
+      item._isBumped = isBumped;
+      if (isBumped) {
+        bumpedSypTagsOnDay.add(itemSypTag);
+      }
+    } else {
+      item._isBumped = false;
+    }
+  });
+
+  // Sort bumped SYP tags in standard priority order: SYP (Bio), SYP (Chem), SYP (Phys)
+  const sortedBumpedSypLanes = SYP_TAGS.filter(t => bumpedSypTagsOnDay.has(t));
+
+  // Collect other non-grade, non-SYP tags on this day
+  const nonGradeNonSypTags = new Set();
+  dayActivities.forEach(act => {
+    if (act.tags) {
       act.tags.forEach(t => {
-        const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === t.trim().toLowerCase());
-        if (!isGrade) {
-          nonGradeTagsSet.add(t.trim());
+        if (!FIXED_GRADE_TAGS.includes(t) && !SYP_TAGS.includes(t)) {
+          nonGradeNonSypTags.add(t);
         }
       });
     }
   });
 
-  const nonGradeTagsList = Array.from(nonGradeTagsSet).sort((a, b) => {
-    const idxA = allTags.findIndex(t => t.name.toLowerCase() === a.toLowerCase());
-    const idxB = allTags.findIndex(t => t.name.toLowerCase() === b.toLowerCase());
-    return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+  const sortedOtherTags = Array.from(nonGradeNonSypTags).sort((a, b) => {
+    const idxA = TAG_ORDER_PRIORITY.indexOf(a);
+    const idxB = TAG_ORDER_PRIORITY.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
   });
 
-  const allDayTracks = [...FIXED_GRADE_TAGS, ...nonGradeTagsList];
+  // All Track Columns on this day: Base Grade Lanes + Bumped SYP Lanes + Other Custom Tag Lanes
+  const allDayTracks = [...FIXED_GRADE_TAGS, ...sortedBumpedSypLanes, ...sortedOtherTags];
 
+  // Active tags set on day for Auto-Fit
   const activeTagsOnDay = new Set();
   dayActivities.forEach(act => {
-    if (act.tags) {
-      act.tags.forEach(t => activeTagsOnDay.add(t.trim().toLowerCase()));
-    }
+    if (act.tags) act.tags.forEach(t => activeTagsOnDay.add(t));
   });
 
+  const hasNonBumpedSYP = expandedActs.some(item => {
+    const syp = item._sypSplitTag || (item.tags ? item.tags.find(t => SYP_TAGS.includes(t)) : null);
+    return syp && !item._isBumped;
+  });
+
+  // Track Weights for horizontal grid spacing
   const trackWeights = allDayTracks.map(trackTag => {
-    const isGrade = FIXED_GRADE_TAGS.some(g => g.toLowerCase() === trackTag.toLowerCase());
-    if (isAutoFitLanes && isGrade) {
-      const hasActivityOnDay = activeTagsOnDay.has(trackTag.toLowerCase());
-      return hasActivityOnDay ? 1 : 0;
+    if (isAutoFitLanes && FIXED_GRADE_TAGS.includes(trackTag)) {
+      if ((trackTag === 'Grade 11' || trackTag === 'Grade 12') && hasNonBumpedSYP) {
+        return 1; // Preserve Grade 11 & 12 lane width if non-bumped SYP sub-lanes are rendered
+      }
+      return activeTagsOnDay.has(trackTag) ? 1 : 0;
     }
     return 1;
   });
 
   let totalWeight = trackWeights.reduce((sum, w) => sum + w, 0);
-
   if (totalWeight === 0) {
     for (let i = 0; i < trackWeights.length; i++) trackWeights[i] = 1;
     totalWeight = trackWeights.length;
@@ -214,36 +303,67 @@ function computeOverlappingDayLayouts(dayActivities, allTags = [], isAutoFitLane
     currentOffset += wPercent;
   }
 
-  return dayActivities.map(act => {
-    const matchingIndices = [];
+  const trackIndexMap = {};
+  allDayTracks.forEach((t, idx) => { trackIndexMap[t] = idx; });
 
-    if (act.tags && act.tags.length > 0) {
-      act.tags.forEach(t => {
-        const idx = allDayTracks.findIndex(
-          trackTag => trackTag.toLowerCase() === t.trim().toLowerCase()
-        );
-        if (idx !== -1) {
-          matchingIndices.push(idx);
-        }
-      });
-    }
+  // Calculate combined Grade 11 + Grade 12 Zone
+  const g11Idx = trackIndexMap['Grade 11'];
+  const g12Idx = trackIndexMap['Grade 12'];
+  const g11_12_left = trackOffsets[g11Idx];
+  const g11_12_width = (trackOffsets[g12Idx] + trackWidths[g12Idx]) - g11_12_left;
+
+  const sypSublaneWidth = g11_12_width / 3.0;
+  const sypSublaneMap = {
+    'SYP (Bio)': g11_12_left + 0 * sypSublaneWidth,
+    'SYP (Chem)': g11_12_left + 1 * sypSublaneWidth,
+    'SYP (Phys)': g11_12_left + 2 * sypSublaneWidth,
+  };
+
+  // Compute exact left and width percentages for each item
+  return expandedActs.map(item => {
+    const tagsInItem = item.tags || [];
+    const sypTag = item._sypSplitTag || tagsInItem.find(t => SYP_TAGS.includes(t));
 
     let left = 0;
     let width = 100;
 
-    if (matchingIndices.length > 0) {
-      const minIdx = Math.min(...matchingIndices);
-      const maxIdx = Math.max(...matchingIndices);
+    if (sypTag) {
+      if (item._isBumped) {
+        // Positioned strictly in its bumped lane to the right of Grade 12
+        if (sypTag in trackIndexMap) {
+          const idx = trackIndexMap[sypTag];
+          left = trackOffsets[idx];
+          width = trackWidths[idx];
+        }
+      } else {
+        // Positioned strictly in its 1/3 sub-lane under Grade 11 & Grade 12
+        left = sypSublaneMap[sypTag] !== undefined ? sypSublaneMap[sypTag] : g11_12_left;
+        width = sypSublaneWidth;
+      }
+    } else {
+      // Standard Grade positioning
+      const matchingIndices = [];
+      const gradeTags = tagsInItem.filter(t => FIXED_GRADE_TAGS.includes(t));
+      const effectiveTags = gradeTags.length > 0 ? gradeTags : tagsInItem;
 
-      left = trackOffsets[minIdx];
-      width = 0;
-      for (let k = minIdx; k <= maxIdx; k++) {
-        width += trackWidths[k];
+      effectiveTags.forEach(t => {
+        if (t in trackIndexMap) matchingIndices.push(trackIndexMap[t]);
+      });
+
+      if (matchingIndices.length > 0) {
+        const minIdx = Math.min(...matchingIndices);
+        const maxIdx = Math.max(...matchingIndices);
+
+        left = trackOffsets[minIdx];
+        width = 0;
+        for (let k = minIdx; k <= maxIdx; k++) {
+          width += trackWidths[k];
+        }
       }
     }
 
     return {
-      ...act,
+      ...item,
       left,
       width
     };
@@ -273,6 +393,7 @@ export default function App() {
   // Core Data States
   const [activities, setActivities] = useState([]);
   const [tags, setTags] = useState(DEFAULT_TAGS);
+  const [stemUnits, setStemUnits] = useState(DEFAULT_STEM_UNITS);
 
   // Layout Minimization States
   const [minimizedDayIds, setMinimizedDayIds] = useState([]);
@@ -334,7 +455,7 @@ export default function App() {
     return `80px ${colSpecs.join(' ')}`;
   }, [displayedDates, minimizedDayIds]);
 
-  // Refs to access current activities/tags inside global event listeners
+  // Refs to access current state inside global event listeners
   const activitiesRef = useRef(activities);
   useEffect(() => {
     activitiesRef.current = activities;
@@ -344,6 +465,11 @@ export default function App() {
   useEffect(() => {
     tagsRef.current = tags;
   }, [tags]);
+
+  const stemUnitsRef = useRef(stemUnits);
+  useEffect(() => {
+    stemUnitsRef.current = stemUnits;
+  }, [stemUnits]);
 
   // Sync & Sharing States
   const [syncStatus, setSyncStatus] = useState('connecting');
@@ -375,9 +501,11 @@ export default function App() {
   const [tagNameInput, setTagNameInput] = useState('');
   const [tagColorInput, setTagColorInput] = useState('#93c5fd');
 
-  // Tag Drag-and-Drop Reordering States
+  // Drag-and-Drop Reordering States
   const [draggedTagIndex, setDraggedTagIndex] = useState(null);
   const [dragOverTagIndex, setDragOverTagIndex] = useState(null);
+  const [draggedStemIndex, setDraggedStemIndex] = useState(null);
+  const [dragOverStemIndex, setDragOverStemIndex] = useState(null);
 
   // Form State for Activity Add/Edit
   const [formTitle, setFormTitle] = useState('');
@@ -387,6 +515,8 @@ export default function App() {
   const [formVenue, setFormVenue] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formTags, setFormTags] = useState([]);
+  const [formStemUnits, setFormStemUnits] = useState([]);
+  const [formPax, setFormPax] = useState('');
 
   // Dragging and Resizing state tracking
   const [draggingAct, setDraggingAct] = useState(null);
@@ -472,7 +602,7 @@ export default function App() {
       if (hash.includes('mode=view') || hash.includes('mode=readonly')) {
         setIsReadOnly(true);
         setReadOnlyBanner(true);
-        setIsQuickStartOpen(true); // Open Quick Start Guide automatically in read-only mode
+        setIsQuickStartOpen(true);
       } else {
         if (!currentUser) {
           setIsReadOnly(true);
@@ -497,17 +627,15 @@ export default function App() {
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (Array.isArray(data.activities)) {
-            setActivities(data.activities);
-          }
-          if (Array.isArray(data.tags)) {
-            setTags(data.tags);
-          }
+          if (Array.isArray(data.activities)) setActivities(data.activities);
+          if (Array.isArray(data.tags)) setTags(data.tags);
+          if (Array.isArray(data.stemUnits)) setStemUnits(data.stemUnits);
           setSyncStatus('synced');
         } else if (!isReadOnly) {
           const initialData = {
             activities: DEFAULT_INITIAL_ACTIVITIES,
             tags: DEFAULT_TAGS,
+            stemUnits: DEFAULT_STEM_UNITS,
             createdAt: new Date().toISOString()
           };
           setDoc(docRef, initialData)
@@ -527,6 +655,7 @@ export default function App() {
             const parsed = JSON.parse(localData);
             setActivities(parsed.activities || DEFAULT_INITIAL_ACTIVITIES);
             setTags(parsed.tags || DEFAULT_TAGS);
+            setStemUnits(parsed.stemUnits || DEFAULT_STEM_UNITS);
           } catch (e) {
             setActivities(DEFAULT_INITIAL_ACTIVITIES);
           }
@@ -542,9 +671,9 @@ export default function App() {
   // Effect 3: Local Storage Auto-backup
   useEffect(() => {
     if (activities.length > 0) {
-      localStorage.setItem('ymsat_2027_schedule', JSON.stringify({ activities, tags }));
+      localStorage.setItem('ymsat_2027_schedule', JSON.stringify({ activities, tags, stemUnits }));
     }
-  }, [activities, tags]);
+  }, [activities, tags, stemUnits]);
 
   // Hover Popover Timers
   const handleActivityMouseEnter = (e, act) => {
@@ -556,7 +685,7 @@ export default function App() {
 
     hoverTimerRef.current = setTimeout(() => {
       const popoverWidth = 280;
-      const popoverHeight = 280;
+      const popoverHeight = 320;
 
       let x = rect.right + 10;
       if (x + popoverWidth > window.innerWidth) {
@@ -595,13 +724,14 @@ export default function App() {
   };
 
   // Push updates to Firestore
-  const saveToCloud = async (newActivities, newTags = tags, recordHistory = true) => {
+  const saveToCloud = async (newActivities, newTags = tags, newStemUnits = stemUnits, recordHistory = true) => {
     if (isReadOnly) return;
 
     if (recordHistory) {
       const snapshotToPush = dragSnapshotRef.current || {
         activities: [...activitiesRef.current],
-        tags: [...tagsRef.current]
+        tags: [...tagsRef.current],
+        stemUnits: [...stemUnitsRef.current]
       };
       setUndoStack(prev => [...prev.slice(-9), snapshotToPush]);
       setRedoStack([]);
@@ -610,12 +740,14 @@ export default function App() {
 
     setActivities(newActivities);
     setTags(newTags);
+    setStemUnits(newStemUnits);
 
     try {
       const docRef = doc(db, "schedules", FIREBASE_DOC_PATH);
       await setDoc(docRef, {
         activities: newActivities,
         tags: newTags,
+        stemUnits: newStemUnits,
         updatedAt: new Date().toISOString()
       }, { merge: true });
       setSyncStatus('synced');
@@ -623,6 +755,17 @@ export default function App() {
       console.warn("Failed saving to Firestore, local state preserved:", err);
       setSyncStatus('local');
     }
+  };
+
+  // Copy Activity Handler
+  const handleCopyActivity = (actToCopy) => {
+    if (isReadOnly) return;
+    const newAct = {
+      ...actToCopy,
+      id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: `${actToCopy.title} (Copy)`
+    };
+    saveToCloud([...activitiesRef.current, newAct]);
   };
 
   // Undo Handler
@@ -634,13 +777,14 @@ export default function App() {
 
     const currentState = {
       activities: [...activitiesRef.current],
-      tags: [...tagsRef.current]
+      tags: [...tagsRef.current],
+      stemUnits: [...stemUnitsRef.current]
     };
 
     setRedoStack(prev => [...prev.slice(-9), currentState]);
     setUndoStack(newUndoStack);
 
-    saveToCloud(previousState.activities, previousState.tags, false);
+    saveToCloud(previousState.activities, previousState.tags, previousState.stemUnits, false);
   };
 
   // Redo Handler
@@ -652,13 +796,14 @@ export default function App() {
 
     const currentState = {
       activities: [...activitiesRef.current],
-      tags: [...tagsRef.current]
+      tags: [...tagsRef.current],
+      stemUnits: [...stemUnitsRef.current]
     };
 
     setUndoStack(prev => [...prev.slice(-9), currentState]);
     setRedoStack(newRedoStack);
 
-    saveToCloud(nextState.activities, nextState.tags, false);
+    saveToCloud(nextState.activities, nextState.tags, nextState.stemUnits, false);
   };
 
   // Keyboard Shortcuts Listener
@@ -838,6 +983,44 @@ export default function App() {
     saveToCloud(activities, updatedTags);
   };
 
+  // STEM Unit Reordering Handlers
+  const handleMoveStemUnit = (fromIdx, toIdx) => {
+    if (toIdx < 0 || toIdx >= stemUnits.length) return;
+    const updated = [...stemUnits];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    saveToCloud(activities, tags, updated);
+  };
+
+  const handleStemDragStart = (e, index) => {
+    setDraggedStemIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleStemDragOver = (e, index) => {
+    e.preventDefault();
+    if (dragOverStemIndex !== index) {
+      setDragOverStemIndex(index);
+    }
+  };
+
+  const handleStemDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedStemIndex === null || draggedStemIndex === targetIndex) {
+      setDraggedStemIndex(null);
+      setDragOverStemIndex(null);
+      return;
+    }
+
+    const updated = [...stemUnits];
+    const [moved] = updated.splice(draggedStemIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+
+    setDraggedStemIndex(null);
+    setDragOverStemIndex(null);
+    saveToCloud(activities, tags, updated);
+  };
+
   const openAddActivityModal = (defaultDate = '2027-01-21', defaultStart = '08:00') => {
     setEditingActivity(null);
     setFormTitle('');
@@ -848,6 +1031,8 @@ export default function App() {
     setFormVenue('');
     setFormDescription('');
     setFormTags([]);
+    setFormStemUnits([]);
+    setFormPax('');
     setIsActivityModalOpen(true);
   };
 
@@ -860,6 +1045,8 @@ export default function App() {
     setFormVenue(act.venue || '');
     setFormDescription(act.description || '');
     setFormTags(act.tags || []);
+    setFormStemUnits(act.stemUnits || []);
+    setFormPax(act.pax !== undefined && act.pax !== null ? String(act.pax) : '');
     setIsActivityModalOpen(true);
   };
 
@@ -883,7 +1070,9 @@ export default function App() {
       endTime: formEndTime,
       venue: formVenue.trim(),
       description: formDescription.trim(),
-      tags: formTags
+      tags: formTags,
+      stemUnits: formStemUnits,
+      pax: formPax.trim()
     };
 
     let updatedList;
@@ -945,7 +1134,8 @@ export default function App() {
 
     dragSnapshotRef.current = {
       activities: [...activitiesRef.current],
-      tags: [...tagsRef.current]
+      tags: [...tagsRef.current],
+      stemUnits: [...stemUnitsRef.current]
     };
 
     const columnEl = e.currentTarget.closest('[data-day-column="true"]');
@@ -970,10 +1160,13 @@ export default function App() {
 
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
+      const query = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery ||
-        act.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (act.venue && act.venue.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (act.description && act.description.toLowerCase().includes(searchQuery.toLowerCase()));
+        act.title.toLowerCase().includes(query) ||
+        (act.venue && act.venue.toLowerCase().includes(query)) ||
+        (act.description && act.description.toLowerCase().includes(query)) ||
+        (act.pax && String(act.pax).toLowerCase().includes(query)) ||
+        (act.stemUnits && act.stemUnits.some(u => u.toLowerCase().includes(query)));
 
       const matchesTag = selectedTagFilters.length === 0 ||
         act.tags.some(t => selectedTagFilters.includes(t));
@@ -1084,25 +1277,46 @@ export default function App() {
             darkMode ? 'bg-slate-900/95 border-slate-700 text-slate-100' : 'bg-white/95 border-slate-300 text-slate-800'
           }`}
         >
+          {hoverPopover.act.stemUnits && hoverPopover.act.stemUnits.length > 0 && (
+            <div className="w-full bg-slate-900 text-amber-300 font-black text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-md text-center mb-2.5 shadow-sm border border-amber-400/30">
+              {hoverPopover.act.stemUnits.map(u => u.toUpperCase()).join(' • ')}
+            </div>
+          )}
+
           <div className="flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400 mb-1.5">
             <div className="flex items-center space-x-1.5">
               <Info className="w-4 h-4 flex-shrink-0" />
               <span>Activity Overview</span>
             </div>
             {!isReadOnly && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const actToEdit = hoverPopover.act;
-                  setHoverPopover(null);
-                  openEditActivityModal(actToEdit);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-0.5 rounded font-semibold transition flex items-center space-x-1 shadow-xs"
-                title="Edit Activity Details"
-              >
-                <Edit3 className="w-3 h-3" />
-                <span>Edit</span>
-              </button>
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const actToCopy = hoverPopover.act;
+                    setHoverPopover(null);
+                    handleCopyActivity(actToCopy);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-2 py-0.5 rounded font-semibold transition flex items-center space-x-1 shadow-xs"
+                  title="Copy Activity"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const actToEdit = hoverPopover.act;
+                    setHoverPopover(null);
+                    openEditActivityModal(actToEdit);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-0.5 rounded font-semibold transition flex items-center space-x-1 shadow-xs"
+                  title="Edit Activity Details"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>Edit</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -1127,6 +1341,13 @@ export default function App() {
               <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400 font-semibold">
                 <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate">{hoverPopover.act.venue}</span>
+              </div>
+            )}
+
+            {hoverPopover.act.pax && (
+              <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-semibold">
+                <Users className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{hoverPopover.act.pax} Pax</span>
               </div>
             )}
 
@@ -1331,7 +1552,7 @@ export default function App() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search activity, venue..."
+                placeholder="Search activity, venue, STEM unit..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
@@ -1528,7 +1749,7 @@ export default function App() {
                         className="w-full flex items-center justify-center space-x-1 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition"
                       >
                         <Tag className="w-3 h-3" />
-                        <span>Manage Tags</span>
+                        <span>Manage Tags & Units</span>
                       </button>
                     </div>
                   )}
@@ -1543,10 +1764,10 @@ export default function App() {
                   setIsTagModalOpen(true);
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center space-x-1 transition ${darkMode ? 'border-indigo-800 bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900/80' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
-                title="Add or Edit Grade Level Tags"
+                title="Manage Tags & STEM Unit Order"
               >
                 <Tag className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Manage Tags</span>
+                <span className="hidden sm:inline">Manage Tags & Units</span>
               </button>
             )}
           </div>
@@ -1714,7 +1935,7 @@ export default function App() {
                               ? 'bg-indigo-600 text-white font-bold'
                               : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-800'
                           }`}
-                          title={isFitLanes ? "Restore all 6 grade lanes for this day" : "Minimize empty grade lanes on this day"}
+                          title={isFitLanes ? "Restore all grade lanes for this day" : "Minimize empty grade lanes on this day"}
                         >
                           <Columns className="w-2.5 h-2.5" />
                           <span>{isFitLanes ? 'Fitted' : 'Fit'}</span>
@@ -1855,7 +2076,7 @@ export default function App() {
 
                       return (
                         <div
-                          key={act.id}
+                          key={act._virtualKey || act.id}
                           style={{
                             top: `${topPercent}%`,
                             height: `${heightPercent}%`,
@@ -1878,6 +2099,12 @@ export default function App() {
                           className={cardClasses}
                         >
                           <div>
+                            {act.stemUnits && act.stemUnits.length > 0 && (
+                              <div className="w-full bg-slate-900/90 text-amber-300 font-black text-[9px] px-1 py-0.5 uppercase tracking-wider text-center truncate border-b border-amber-400/30 rounded-t-sm mb-1 shadow-xs">
+                                {act.stemUnits.map(u => u.toUpperCase()).join(' • ')}
+                              </div>
+                            )}
+
                             <div className="flex items-start justify-between gap-1">
                               <div className="font-bold truncate text-[11px] leading-tight">
                                 {act.title}
@@ -1902,6 +2129,13 @@ export default function App() {
                               <div className="text-[10px] font-semibold flex items-center space-x-1 mt-0.5 truncate">
                                 <MapPin className="w-2.5 h-2.5 flex-shrink-0 text-rose-600" />
                                 <span className="truncate">{act.venue}</span>
+                              </div>
+                            )}
+
+                            {act.pax && (
+                              <div className="text-[10px] font-semibold flex items-center space-x-1 mt-0.5 truncate text-indigo-900 dark:text-indigo-200">
+                                <Users className="w-2.5 h-2.5 flex-shrink-0 text-indigo-600" />
+                                <span className="truncate">{act.pax} Pax</span>
                               </div>
                             )}
                           </div>
@@ -1933,7 +2167,14 @@ export default function App() {
                           </div>
 
                           {!isReadOnly && !batchMode && (
-                            <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 flex items-center space-x-0.5 bg-slate-900/80 text-white rounded p-0.5 transition no-print">
+                            <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 flex items-center space-x-0.5 bg-slate-900/80 text-white rounded p-0.5 transition no-print z-20">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCopyActivity(act); }}
+                                className="p-0.5 hover:text-emerald-400"
+                                title="Copy Activity"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); openEditActivityModal(act); }}
                                 className="p-0.5 hover:text-blue-400"
@@ -2022,6 +2263,55 @@ export default function App() {
                 />
               </div>
 
+              {/* STEM Unit Multi-Select Section */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    STEM Unit In-Charge
+                  </label>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsActivityModalOpen(false);
+                        setIsTagModalOpen(true);
+                      }}
+                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                    >
+                      ⚙️ Reorder Units
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {stemUnits.map(unit => {
+                    const isSelected = formStemUnits.includes(unit);
+                    return (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setFormStemUnits(formStemUnits.filter(u => u !== unit));
+                          } else {
+                            setFormStemUnits([...formStemUnits, unit]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase transition border ${
+                          isSelected
+                            ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-sm dark:bg-amber-400 dark:text-slate-950 dark:border-amber-400'
+                            : darkMode
+                            ? 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+                            : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 inline mr-1" />}
+                        {unit}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Date</label>
@@ -2059,21 +2349,39 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Venue / Location</label>
-                <div className="relative">
-                  <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="e.g. AVR Room 1, Main Field, Gymnasium"
-                    list="venue-suggestions"
-                    value={formVenue}
-                    onChange={(e) => setFormVenue(e.target.value)}
-                    className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-300'}`}
-                  />
-                  <datalist id="venue-suggestions">
-                    {existingVenues.map(v => <option key={v} value={v} />)}
-                  </datalist>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Venue / Location</label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="e.g. AVR Room 1, Main Field"
+                      list="venue-suggestions"
+                      value={formVenue}
+                      onChange={(e) => setFormVenue(e.target.value)}
+                      className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-300'}`}
+                    />
+                    <datalist id="venue-suggestions">
+                      {existingVenues.map(v => <option key={v} value={v} />)}
+                    </datalist>
+                  </div>
+                </div>
+
+                {/* Number of Pax Field */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Number of Pax (Attendees)</label>
+                  <div className="relative">
+                    <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 50"
+                      value={formPax}
+                      onChange={(e) => setFormPax(e.target.value)}
+                      className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-300'}`}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2129,34 +2437,50 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsActivityModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition"
-                >
-                  {editingActivity ? 'Save Changes' : 'Create Activity'}
-                </button>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
+                {!isReadOnly && editingActivity ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCopyActivity(editingActivity);
+                      setIsActivityModalOpen(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center space-x-1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Duplicate Activity</span>
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsActivityModalOpen(false)}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition"
+                  >
+                    {editingActivity ? 'Save Changes' : 'Create Activity'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: Manage Tags Add / Edit / Reorder Modal */}
+      {/* MODAL 2: Manage Tags & STEM Units Modal */}
       {isTagModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
-          <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+          <div className={`w-full max-w-lg rounded-2xl border shadow-2xl p-6 transition-all max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
             <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
               <h2 className="text-lg font-bold flex items-center space-x-2">
                 <Tag className="w-5 h-5 text-indigo-500" />
-                <span>Manage Grade Level & Activity Tags</span>
+                <span>Manage Tags & STEM Unit Labels</span>
               </h2>
               <button onClick={() => setIsTagModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -2177,7 +2501,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="Tag Name (e.g. Grade 12, VIP, Workshop)"
+                  placeholder="Tag Name (e.g. SYP (Bio), Grade 12, VIP)"
                   value={tagNameInput}
                   onChange={(e) => setTagNameInput(e.target.value)}
                   className={`flex-1 px-3 py-1.5 text-xs rounded-lg border focus:ring-2 focus:ring-indigo-500 focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-700' : 'bg-white border-slate-300'}`}
@@ -2204,8 +2528,8 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Pastel Palette Presets:</label>
-                <div className="flex flex-wrap gap-1.5">
+                <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Color Options (30 Presets):</label>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                   {PASTEL_PALETTE.map(hex => (
                     <button
                       key={hex}
@@ -2230,7 +2554,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
                 {tags.map((tag, index) => {
                   const assignedCount = activities.filter(a => a.tags.includes(tag.name)).length;
                   const isDragging = draggedTagIndex === index;
@@ -2281,7 +2605,67 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+            {/* STEM Units Reordering Section */}
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  STEM Unit Labels Order ({stemUnits.length})
+                </label>
+                <span className="text-[10px] text-amber-500 font-semibold flex items-center space-x-1">
+                  <GripVertical className="w-3 h-3" />
+                  <span>Drag or use arrows to reorder</span>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                {stemUnits.map((unit, index) => {
+                  const isDragging = draggedStemIndex === index;
+                  const isDragOver = dragOverStemIndex === index;
+
+                  return (
+                    <div
+                      key={unit}
+                      draggable
+                      onDragStart={(e) => handleStemDragStart(e, index)}
+                      onDragOver={(e) => handleStemDragOver(e, index)}
+                      onDrop={(e) => handleStemDrop(e, index)}
+                      onDragEnd={() => { setDraggedStemIndex(null); setDragOverStemIndex(null); }}
+                      className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold uppercase border transition cursor-grab active:cursor-grabbing ${
+                        isDragging ? 'opacity-40 border-dashed border-amber-500' : ''
+                      } ${
+                        isDragOver ? 'border-2 border-amber-500 bg-amber-500/10' : 'bg-slate-900 text-amber-300 border-slate-900 dark:bg-amber-400 dark:text-slate-950 dark:border-amber-400'
+                      }`}
+                    >
+                      <GripVertical className="w-3 h-3 opacity-60" />
+                      <span>{unit}</span>
+
+                      <div className="flex items-center space-x-0.5 ml-1 border-l border-amber-400/30 pl-1 no-print">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => handleMoveStemUnit(index, index - 1)}
+                          className="p-0.5 hover:bg-white/20 rounded disabled:opacity-20"
+                          title="Move Left"
+                        >
+                          <ChevronLeft className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === stemUnits.length - 1}
+                          onClick={() => handleMoveStemUnit(index, index + 1)}
+                          className="p-0.5 hover:bg-white/20 rounded disabled:opacity-20"
+                          title="Move Right"
+                        >
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end mt-6 pt-3 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsTagModalOpen(false)}
@@ -2451,7 +2835,7 @@ export default function App() {
 
                     return (
                       <div
-                        key={act.id}
+                        key={act._virtualKey || act.id}
                         style={{
                           top: `${topPercent}%`,
                           height: `${heightPercent}%`,
@@ -2463,11 +2847,24 @@ export default function App() {
                         className={cardClasses}
                       >
                         <div>
+                          {act.stemUnits && act.stemUnits.length > 0 && (
+                            <div className="w-full bg-slate-900/90 text-amber-300 font-black text-[10px] px-2 py-1 uppercase tracking-wider text-center truncate border-b border-amber-400/30 rounded-t-md mb-1.5 shadow-xs">
+                              {act.stemUnits.map(u => u.toUpperCase()).join(' • ')}
+                            </div>
+                          )}
+
                           <div className="flex items-start justify-between gap-1">
                             <div className="font-bold text-sm sm:text-base leading-snug">{act.title}</div>
 
                             {!isReadOnly && !batchMode && (
-                              <div className="opacity-0 group-hover/daycard:opacity-100 flex items-center space-x-1 bg-slate-900/80 text-white rounded p-1 transition no-print">
+                              <div className="opacity-0 group-hover/daycard:opacity-100 flex items-center space-x-1 bg-slate-900/80 text-white rounded p-1 transition no-print z-20">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCopyActivity(act); }}
+                                  className="p-0.5 hover:text-emerald-400"
+                                  title="Copy Activity"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openEditActivityModal(act); }}
                                   className="p-0.5 hover:text-blue-400"
@@ -2495,6 +2892,13 @@ export default function App() {
                             <div className="text-xs font-semibold flex items-center space-x-1 mt-1 text-rose-800">
                               <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                               <span>{act.venue}</span>
+                            </div>
+                          )}
+
+                          {act.pax && (
+                            <div className="text-xs font-semibold flex items-center space-x-1 mt-1 text-indigo-900 dark:text-indigo-200">
+                              <Users className="w-3.5 h-3.5 flex-shrink-0 text-indigo-600" />
+                              <span>{act.pax} Pax</span>
                             </div>
                           )}
 
@@ -2652,12 +3056,12 @@ export default function App() {
                       <tr>
                         <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Search Bar</td>
                         <td className="p-2.5">Type in the search box at the top.</td>
-                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Instantly finds events by title, venue, or keyword.</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Instantly finds events by title, venue, STEM unit, or keyword.</td>
                       </tr>
                       <tr>
                         <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Filter Tags</td>
                         <td className="p-2.5">Click <strong>Filter Tags</strong> → Check your grade or group.</td>
-                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Shows only the events for your grade (e.g., <em>Grade 7</em>, <em>Grade 12</em>, or <em>Guests</em>).</td>
+                        <td className="p-2.5 text-slate-500 dark:text-slate-400">Shows only the events for your grade (e.g., <em>Grade 7</em>, <em>SYP (Bio)</em>, or <em>Guests</em>).</td>
                       </tr>
                       <tr>
                         <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">Grid Sliders</td>
@@ -2684,7 +3088,7 @@ export default function App() {
                 <h3 className="font-bold text-sm text-blue-600 dark:text-blue-400 mb-2">2. Reading Activity Cards</h3>
                 <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-300">
                   <li>
-                    <strong>1-Second Details Popover:</strong> Hold your mouse over any event card for <strong>1 second</strong> to pop open a detailed window showing the full description, venue location, and exact start and end times.
+                    <strong>1-Second Details Popover:</strong> Hold your mouse over any event card for <strong>1 second</strong> to pop open a detailed window showing the full description, STEM organizing unit, venue location, attendee pax, and exact start and end times.
                   </li>
                 </ul>
               </div>
@@ -2734,7 +3138,7 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
-                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ activities, tags }, null, 2));
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ activities, tags, stemUnits }, null, 2));
                       const downloadAnchor = document.createElement('a');
                       downloadAnchor.setAttribute("href", dataStr);
                       downloadAnchor.setAttribute("download", `ymsat_2027_schedule_backup.json`);
@@ -2763,7 +3167,7 @@ export default function App() {
                             try {
                               const parsed = JSON.parse(event.target.result);
                               if (Array.isArray(parsed.activities)) {
-                                saveToCloud(parsed.activities, parsed.tags || tags);
+                                saveToCloud(parsed.activities, parsed.tags || tags, parsed.stemUnits || stemUnits);
                                 setIsSettingsOpen(false);
                                 alert("Schedule backup successfully imported!");
                               }
@@ -2784,9 +3188,9 @@ export default function App() {
                   onClick={() => {
                     setConfirmDialog({
                       title: "Reset Schedule Data",
-                      message: "Are you sure you want to restore default Opening Program activity and tags?",
+                      message: "Are you sure you want to restore default Opening Program activity, tags, and STEM units?",
                       onConfirm: () => {
-                        saveToCloud(DEFAULT_INITIAL_ACTIVITIES, DEFAULT_TAGS);
+                        saveToCloud(DEFAULT_INITIAL_ACTIVITIES, DEFAULT_TAGS, DEFAULT_STEM_UNITS);
                         setIsSettingsOpen(false);
                         setConfirmDialog(null);
                       }
@@ -2794,7 +3198,7 @@ export default function App() {
                   }}
                   className="w-full text-center text-xs text-rose-500 hover:text-rose-600 font-semibold py-1.5"
                 >
-                  Reset to Default Opening Program & Tags
+                  Reset to Default Opening Program, Tags & Units
                 </button>
               </div>
             </div>
