@@ -1359,7 +1359,7 @@ export default function App() {
             )}
 
             {hoverPopover.act.description && (
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed line-clamp-4">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed max-h-32 overflow-y-auto pr-1 whitespace-pre-wrap select-text">
                 {hoverPopover.act.description}
               </div>
             )}
@@ -2969,7 +2969,12 @@ export default function App() {
                           )}
 
                           {act.description && (
-                            <p className="text-xs mt-1.5 opacity-90 line-clamp-3">{act.description}</p>
+                            <div
+                              onMouseDown={(e) => e.stopPropagation()}
+                              className="text-xs mt-1.5 opacity-90 max-h-28 overflow-y-auto pr-1 whitespace-pre-wrap select-text cursor-text border-t border-black/10 dark:border-white/10 pt-1"
+                            >
+                              {act.description}
+                            </div>
                           )}
                         </div>
 
